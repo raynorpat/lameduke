@@ -176,12 +176,13 @@ static int play_demo(const demo_t *demo)
 {
     int i;
     int hz = demo_hz(demo);
+    int remainder = 0;
+    uint32_t deadline = timer_ticks();
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *trace = getenv("LAMEDUKE_TRACE");
 
     for (i = 0; i < demo->count; i++) {
         int tics = demo->tics[i];
-        uint32_t start;
 
         if (input_poll())
             return 1;
@@ -199,8 +200,10 @@ static int play_demo(const demo_t *demo)
         present();
         if (shot && shot[0])
             continue;
-        start = timer_ticks();
-        while ((int)(timer_ticks() - start) < tics * 1000 / hz) {
+        remainder += tics * 1000;
+        deadline += (uint32_t)(remainder / hz);
+        remainder %= hz;
+        while ((int32_t)(deadline - timer_ticks()) > 0) {
             if (input_poll())
                 return 1;
             SDL_Delay(1);
