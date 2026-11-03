@@ -124,9 +124,13 @@ static int animateoffs(short pic)
     return 0;
 }
 
+/* byte_1AEB90. A bit per tile drawn; loadpics clears it and the game clears
+   the bits it tests. */
+unsigned char gotpic[(MAXTILES + 7) >> 3];
+
 static void setgotpic(short pic)
 {
-    (void)pic; /* byte_1AEB90: read by the game's animation code, lifted with it. */
+    gotpic[pic >> 3] |= (unsigned char)(1 << (pic & 7));
 }
 
 /* 0x561E1. A Q15 arctan series for each column. */

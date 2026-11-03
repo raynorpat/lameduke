@@ -9,7 +9,8 @@ add_executable(d3d
   player.c
   premap.c
   sector.c
-  sounds.c)
+  sounds.c
+  view.c)
 
 target_include_directories(d3d PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(d3d PRIVATE

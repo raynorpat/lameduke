@@ -4,6 +4,8 @@
 #include "sounds.h"
 #include "demo.h"
 #include "global.h"
+#include "actors.h"
+#include "view.h"
 
 #include "cache1d.h"
 #include "engine.h"
@@ -146,7 +148,8 @@ static void present(void)
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *at = getenv("LAMEDUKE_FRAME_AT");
 
-    draw_view();
+    if (sintable() && palookup[0])
+        displayrooms(screenpeek);
     platform_present(framebuffer(), xdim, ydim);
     presented++;
     /* Debug aid: dump the Nth frame (default 1), then exit. */
@@ -182,10 +185,15 @@ static int play_demo(const demo_t *demo)
 
         if (input_poll())
             return 1;
-        player_move(signed_byte(demo->forward[i]), signed_byte(demo->strafe[i]),
-            signed_byte(demo->turn[i]), tics, demo->bits[i]);
+        syncfvel[0] = (signed char)signed_byte(demo->forward[i]);
+        syncsvel[0] = (signed char)signed_byte(demo->strafe[i]);
+        syncavel[0] = (signed char)signed_byte(demo->turn[i]);
+        syncbits[0] = demo->bits[i];
+        synctics = (unsigned char)tics;
+        domovethings();
         if (trace && trace[0])
-            printf("sample %d %d %d %d %d %d\n", i, posx, posy, posz, ang, cursectnum);
+            printf("sample %d %d %d %d %d %d\n", i, ps[0].posx, ps[0].posy, ps[0].posz, ps[0].ang,
+                ps[0].cursectnum);
         if (tics == 0)
             continue;
         present();
@@ -237,10 +245,15 @@ static int play_level(int record)
         if (steps > 255)
             steps = 255;
         input_sample(steps, &fv, &sv, &av, &look, &mouse_turn);
-        player_look(look);
-        player_move(fv, sv, av, steps, 0);
-        if (mouse_turn)
-            ang = (short)((ang + mouse_turn) & 2047);
+        /* pending: look keys and mouse turn feed the sync bits with the input task */
+        (void)look;
+        (void)mouse_turn;
+        syncfvel[0] = (signed char)fv;
+        syncsvel[0] = (signed char)sv;
+        syncavel[0] = (signed char)av;
+        syncbits[0] = 0;
+        synctics = (unsigned char)steps;
+        domovethings();
         if (record && rec_grow(&rec, &cap) == 0) {
             int n = rec.count;
             rec.forward[n] = store_byte(fv);

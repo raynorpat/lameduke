@@ -6,6 +6,12 @@
 
 extern int parallaxtype; /* byte_23DE9D */
 extern int visibility;  /* byte_23DE9E */
+extern unsigned char gotpic[];
+extern short tspritelist[], tspritepicnum[];
+extern unsigned char tspritepal[];
+extern int spritesortcnt;
+void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, short dacursectnum);
+void drawmasks(void);
 
 void draw_init(void);
 void draw_view(void);
