@@ -9,9 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-sectortype *sector;
-walltype *wall;
-spritetype *sprite;
+sectortype sector[MAXSECTORS];  /* 0x1ECF10 */
+walltype wall[MAXWALLS];        /* 0x1F6310 */
+spritetype sprite[MAXSPRITES];  /* 0x1C6F10 */
 int numsectors;
 int numwalls;
 int numsprites;
@@ -23,17 +23,90 @@ int horiz;
 short ang;
 short cursectnum;
 
+/* Index MAXSECTORS / MAXSTATUS holds the free list head. */
+short headspritesect[MAXSECTORS + 1], headspritestat[MAXSTATUS + 1];
+short prevspritesect[MAXSPRITES], nextspritesect[MAXSPRITES];
+short prevspritestat[MAXSPRITES], nextspritestat[MAXSPRITES];
+
 static void free_board(void)
 {
-    free(sector);
-    free(wall);
-    free(sprite);
-    sector = NULL;
-    wall = NULL;
-    sprite = NULL;
     numsectors = 0;
     numwalls = 0;
     numsprites = 0;
+}
+
+/* 0x50A72 */
+static void initspritelists(void)
+{
+    int i;
+
+    for (i = 0; i < MAXSECTORS; i++)
+        headspritesect[i] = -1;
+    headspritesect[MAXSECTORS] = 0;
+    for (i = 0; i < MAXSPRITES; i++) {
+        prevspritesect[i] = (short)(i - 1);
+        nextspritesect[i] = (short)(i + 1);
+        sprite[i].sectnum = MAXSECTORS;
+    }
+    prevspritesect[0] = -1;
+    nextspritesect[MAXSPRITES - 1] = -1;
+    for (i = 0; i < MAXSTATUS; i++)
+        headspritestat[i] = -1;
+    headspritestat[MAXSTATUS] = 0;
+    for (i = 0; i < MAXSPRITES; i++) {
+        prevspritestat[i] = (short)(i - 1);
+        nextspritestat[i] = (short)(i + 1);
+        sprite[i].statnum = MAXSTATUS;
+    }
+    prevspritestat[0] = -1;
+    nextspritestat[MAXSPRITES - 1] = -1;
+}
+
+/* 0x50B55. Takes the free-list head and pushes it on the front of the sector's list. */
+static int insertspritesect(short sectnum)
+{
+    short blanktouse;
+
+    if (sectnum >= MAXSECTORS || headspritesect[MAXSECTORS] == -1)
+        return -1;
+    blanktouse = headspritesect[MAXSECTORS];
+    headspritesect[MAXSECTORS] = nextspritesect[blanktouse];
+    if (headspritesect[MAXSECTORS] >= 0)
+        prevspritesect[headspritesect[MAXSECTORS]] = -1;
+    prevspritesect[blanktouse] = -1;
+    nextspritesect[blanktouse] = headspritesect[sectnum];
+    if (headspritesect[sectnum] >= 0)
+        prevspritesect[headspritesect[sectnum]] = blanktouse;
+    headspritesect[sectnum] = blanktouse;
+    sprite[blanktouse].sectnum = sectnum;
+    return blanktouse;
+}
+
+/* 0x50BF3 */
+static int insertspritestat(short statnum)
+{
+    short blanktouse;
+
+    if (statnum >= MAXSTATUS || headspritestat[MAXSTATUS] == -1)
+        return -1;
+    blanktouse = headspritestat[MAXSTATUS];
+    headspritestat[MAXSTATUS] = nextspritestat[blanktouse];
+    if (headspritestat[MAXSTATUS] >= 0)
+        prevspritestat[headspritestat[MAXSTATUS]] = -1;
+    prevspritestat[blanktouse] = -1;
+    nextspritestat[blanktouse] = headspritestat[statnum];
+    if (headspritestat[statnum] >= 0)
+        prevspritestat[headspritestat[statnum]] = blanktouse;
+    headspritestat[statnum] = blanktouse;
+    sprite[blanktouse].statnum = statnum;
+    return blanktouse;
+}
+
+/* 0x50B40 */
+int insertsprite(short sectnum, short statnum)
+{
+    insertspritestat(statnum);
+    return insertspritesect(sectnum);
 }
 
 int loadboard(const char *filename)
@@ -46,6 +119,7 @@ int loadboard(const char *filename)
     int i;
 
     free_board();
+    initspritelists();
     fp = plat_fopen(filename, "rb");
     if (!fp)
         return -1;
@@ -59,39 +133,40 @@ int loadboard(const char *filename)
         fclose(fp);
         return -1;
     }
-    if (nsec < 1 || nsec > 2048) {
+    if (nsec < 1 || nsec > MAXSECTORS) {
         fclose(fp);
         return -1;
     }
-    sector = (sectortype *)malloc((size_t)nsec * sizeof(sectortype));
-    if (!sector || fread(sector, sizeof(sectortype), (size_t)nsec, fp) != (size_t)nsec) {
-        fclose(fp);
-        free_board();
-        return -1;
-    }
-    if (fread(&nwal, 2, 1, fp) != 1 || nwal < 0 || nwal > 16384) {
+    if (fread(sector, sizeof(sectortype), (size_t)nsec, fp) != (size_t)nsec) {
         fclose(fp);
         free_board();
         return -1;
     }
-    wall = (walltype *)malloc((size_t)nwal * sizeof(walltype));
-    if (!wall || fread(wall, sizeof(walltype), (size_t)nwal, fp) != (size_t)nwal) {
+    if (fread(&nwal, 2, 1, fp) != 1 || nwal < 0 || nwal > MAXWALLS) {
         fclose(fp);
         free_board();
         return -1;
     }
-    if (fread(&nspr, 2, 1, fp) != 1 || nspr < 0 || nspr > 4096) {
+    if (fread(wall, sizeof(walltype), (size_t)nwal, fp) != (size_t)nwal) {
         fclose(fp);
         free_board();
         return -1;
     }
-    sprite = (spritetype *)malloc(nspr ? (size_t)nspr * sizeof(spritetype) : 1);
-    if (!sprite || (nspr && fread(sprite, sizeof(spritetype), (size_t)nspr, fp) != (size_t)nspr)) {
+    if (fread(&nspr, 2, 1, fp) != 1 || nspr < 0 || nspr > MAXSPRITES) {
         fclose(fp);
         free_board();
         return -1;
     }
-    if (fread(&nextra, 2, 1, fp) != 1 || nextra < 0) {
+    if (nspr && fread(sprite, sizeof(spritetype), (size_t)nspr, fp) != (size_t)nspr) {
+        fclose(fp);
+        free_board();
+        return -1;
+    }
+    /* Several shipped maps end after the sprites. The exe's read() then
+       returns 0 and the count stays as it was, so the board still loads. */
+    if (fread(&nextra, 2, 1, fp) != 1)
+        nextra = 0;
+    if (nextra < 0) {
         fclose(fp);
         free_board();
         return -1;
@@ -108,6 +183,8 @@ int loadboard(const char *filename)
         return -1;
     }
 
+    for (i = 0; i < nspr; i++)
+        insertsprite(sprite[i].sectnum, sprite[i].statnum);
     numsectors = nsec;
     numwalls = nwal;
     numsprites = nspr;
