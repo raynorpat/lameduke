@@ -16,6 +16,12 @@
 
 /* byte_82364. The knee's frame list, shared with the trigger in player.c. */
 extern const unsigned char kickframes[6][20];
+extern int totalclock; /* 0x23CE28, the engine clock. It does not advance yet. */
+
+/* word_12538E / dword_125248, and the sine walk at word_125390. */
+short msgtime;
+const char *msgtext = "";
+static short hudpulse;
 
 #define GOTPIC(p) (gotpic[(p) >> 3] & (1 << ((p) & 7)))
 
@@ -398,12 +404,11 @@ static void displayweapon(short p)
     overlaypal((syncavel[p] >> 3) + 190 - aim, bob + 235 - yb - hz, 1160, shade, 3);
 }
 
-/* 0x73169 base 10, drawn as 0x17890 draws it: the ones digit sits on x and
-   each earlier glyph is 6 px left. The tile is the character plus 0x536. */
-static void drawdigits(int x, int y, int value)
+/* 0x73169 with base 10: a minus sign, no leading zeros, "0" for zero. */
+static void numstring(int value, char *buf)
 {
-    char buf[16], rev[12];
-    int n = 0, d = 0, i;
+    char rev[12];
+    int n = 0, d = 0;
     unsigned int u = (unsigned int)value;
 
     if (value < 0) {
@@ -416,6 +421,59 @@ static void drawdigits(int x, int y, int value)
     } while (u);
     while (d)
         buf[n++] = rev[--d];
+    buf[n] = 0;
+}
+
+/* 0x12850. */
+int minitext(int x, int y, const char *s, int shade)
+{
+    int left = x;
+    const unsigned char *p = (const unsigned char *)s;
+
+    if (ps[myconnectindex].f02 == 2)
+        return 0;
+    if (*p == 0)
+        return x;
+    for (;;) {
+        unsigned char c = *p++;
+
+        if (c == '\n') {
+            x = left;
+            y += 8;
+        } else if (c == ' ') {
+            x += 2;
+        } else {
+            int pic = c + 991;
+            int dy = (c >= 'a' && c <= 'z') ? 2 : 0;
+
+            rotatesprite(x, y + dy, (short)pic, (signed char)shade, 0, 0);
+            x += tilesizx[pic] + 1;
+        }
+        if (*p == 0)
+            return x;
+    }
+}
+
+/* 0x13800. */
+void numtext(int x, int y, int value, int shade)
+{
+    char buf[16];
+
+    numstring(value, buf);
+    minitext(x, y, buf, shade);
+}
+
+/* The status digits, 0x17890 and the same walk inlined at 0x138F0.
+   The ones place sits on x and each earlier glyph is 6 px left.
+   The tile is the character plus 0x536. */
+static void drawdigits(int x, int y, int value)
+{
+    char buf[16];
+    int i, n;
+
+    numstring(value, buf);
+    for (n = 0; buf[n]; n++)
+        ;
     for (i = n; i > 0; i--) {
         rotatesprite(x, y, (short)((unsigned char)buf[i - 1] + 1334), 0, 0, 0);
         x -= 6;
@@ -496,6 +554,48 @@ static void displaystatus(short p)
     }
 }
 
+/* 0x12400, and the level frame's copy at 0x16E94. The countdown line, then
+   the help quote armed by quote(). The timer moves even when the map hides
+   the glyphs. An inset view lifts the quote by 23. */
+static void displayquotes(short p)
+{
+    playertype *pl = &ps[p];
+    int y;
+
+    if (msgtime > 0) {
+        msgtime--;
+        minitext(8, 162, msgtext, 0);
+    }
+    if (pl->w7a < 0 || pl->w7a >= 13)
+        return;
+    if ((&pl->w60)[pl->w7a] > 0) {
+        (&pl->w60)[pl->w7a]--;
+        y = pl->w4a >= 0 ? 166 : 189;
+        minitext(24, y, fta_quotes[pl->w7a], 0);
+    }
+}
+
+/* 0x123D0. Shade from the sine table; the index is the counter's low 11 bits. */
+static int hudshade(void)
+{
+    hudpulse = (short)(hudpulse + 0x80);
+    return (sintable()[hudpulse & 0x07FF] >> 10) + 16;
+}
+
+/* 0x16761. The four corners, and a reticle that blinks with totalclock bit 4,
+   while the player is looking through a monitor. */
+static void displaymonitor(void)
+{
+    int shade = hudshade();
+
+    overlaypal(10, 10, 275, shade, 2);
+    overlaypal(274, 10, 276, shade, 2);
+    overlaypal(10, 160, 277, shade, 2);
+    overlaypal(274, 160, 278, shade, 2);
+    if (totalclock & 0x10)
+        overlaypal(18, 20, 279, shade, 2);
+}
+
 /* 0x14050. Draws player p's view, or the demo camera's. */
 void displayrooms(short p)
 {
@@ -521,10 +621,15 @@ void displayrooms(short p)
     }
     drawmasks();
     /* pending: the tile 572 floor reflection over rows 99..199 */
-    /* The exe draws the weapon, then the status bar, after this view,
-       unless a camera or the w56 view is up (that one is 0x1A420). */
-    if (cameraspr < 0 && pl->w56 < 0) {
+    /* Level play draws the weapon, the status bar and the quotes. A monitor
+       (w56 >= 0) draws the corners instead. The demo path's 0x1A420, used
+       when that same view is up and gm does not have bit 2, is still to lift. */
+    if (pl->w56 >= 0) {
+        if (pl->gm & 4)
+            displaymonitor();
+    } else if (cameraspr < 0) {
         displayweapon(p);
         displaystatus(p);
+        displayquotes(p);
     }
 }
