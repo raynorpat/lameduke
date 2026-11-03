@@ -151,9 +151,23 @@ static void present(void)
     }
 }
 
+/* sub_102A0 steps the clock by 6 when music is on, otherwise by 1, at 120 Hz.
+   A demo whose tics are all multiples of 6 was recorded on the 6-step clock. */
+static int demo_hz(const demo_t *demo)
+{
+    int i;
+
+    for (i = 0; i < demo->count; i++) {
+        if (demo->tics[i] % 6)
+            return 120;
+    }
+    return 720;
+}
+
 static int play_demo(const demo_t *demo)
 {
     int i;
+    int hz = demo_hz(demo);
 
     for (i = 0; i < demo->count; i++) {
         int tics = demo->tics[i];
@@ -162,12 +176,12 @@ static int play_demo(const demo_t *demo)
         if (input_poll())
             return 1;
         player_move(signed_byte(demo->forward[i]), signed_byte(demo->strafe[i]),
-            signed_byte(demo->turn[i]));
+            signed_byte(demo->turn[i]), tics, demo->bits[i]);
         if (tics == 0)
             continue;
         present();
         start = timer_ticks();
-        while ((int)(timer_ticks() - start) < tics * 1000 / 120) {
+        while ((int)(timer_ticks() - start) < tics * 1000 / hz) {
             if (input_poll())
                 return 1;
             SDL_Delay(1);
@@ -190,28 +204,38 @@ static int play_level(int record)
     present();
     while (!input_poll()) {
         uint32_t now = timer_ticks();
-        int dt = (int)(now - prev) * 120 / 1000;
-        int fv, sv, av, look;
+        int elapsed = (int)(now - prev);
+        int irqs;
+        int steps;
+        int per_irq;
+        int fv, sv, av, look, mouse_turn;
 
-        if (dt < 1) {
+        /* Music byte selects the 6-step ISR. The PIT itself stays at 120 Hz. */
+        per_irq = setup_byte(2) != 0 ? 6 : 1;
+        if (elapsed < 0)
+            elapsed = 0;
+        irqs = elapsed * 120 / 1000;
+        if (irqs < 1) {
             SDL_Delay(1);
             continue;
         }
-        if (dt > 8)
-            dt = 8;
-        prev = now;
-        input_stick(&fv, &sv, &av, &look);
-        fv = fv * dt / 6;
-        sv = sv * dt / 6;
-        av = av * dt / 6;
+        if (irqs > 40)
+            irqs = 40;
+        prev += (uint32_t)(irqs * 1000 / 120);
+        steps = irqs * per_irq;
+        if (steps > 255)
+            steps = 255;
+        input_sample(steps, &fv, &sv, &av, &look, &mouse_turn);
         player_look(look);
-        player_move(fv, sv, av);
+        player_move(fv, sv, av, steps, 0);
+        if (mouse_turn)
+            ang = (short)((ang + mouse_turn) & 2047);
         if (record && rec_grow(&rec, &cap) == 0) {
             int n = rec.count;
             rec.forward[n] = store_byte(fv);
             rec.strafe[n] = store_byte(sv);
             rec.turn[n] = store_byte(av);
-            rec.tics[n] = (unsigned char)dt;
+            rec.tics[n] = (unsigned char)steps;
             rec.bits[n] = 0;
             rec.count = n + 1;
         }

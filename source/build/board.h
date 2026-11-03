@@ -89,8 +89,9 @@ int loadboard(const char *filename);
 /* 0x4B977. 1 when (x,y) is inside the sector, 0 when it is not, -1 if sect is invalid. */
 int inside(int x, int y, short sect);
 
-/* One input sample. fvel/svel/avel are signed, already scaled for this step. */
-void player_move(int fvel, int svel, int avel);
+/* One sync sample from sub_31410. Velocities are the signed ramp bytes.
+   tics is the clock delta (byte_1257C1). bits bit 1 halves the step. */
+void player_move(int fvel, int svel, int avel, int tics, int bits);
 void player_look(int dh);
 
 #endif

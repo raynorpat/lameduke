@@ -6,7 +6,8 @@
 
 int input_poll(void);
 
-/* Held movement, in the same units a demo sample stores (signed). */
-void input_stick(int *fvel, int *svel, int *avel, int *look);
+/* Run `steps` of the sub_102A0 ramp, then return the velocities a demo stores.
+   mouse_turn is an extra angle in Build units and is not part of the ramp. */
+void input_sample(int steps, int *fvel, int *svel, int *avel, int *look, int *mouse_turn);
 
 #endif

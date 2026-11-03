@@ -234,23 +234,39 @@ static int try_step(int dx, int dy)
     return 1;
 }
 
-void player_move(int fvel, int svel, int avel)
+void player_move(int fvel, int svel, int avel, int tics, int bits)
 {
     const short *trig;
     int co;
     int si;
     int dx;
     int dy;
+    long long fs;
+    long long ss;
 
+    /* sub_31410 multiplies by the tic count once. A zero delta does not move. */
+    if (tics <= 0)
+        return;
     trig = sintable();
     if (!trig)
         return;
-    ang = (short)((ang + avel) & 2047);
+    /* Sector lotag 2 (high bit ignored) quarters a negative forward byte. */
+    if (cursectnum >= 0 && cursectnum < numsectors
+        && (sector[cursectnum].lotag & 0x7fff) == 2 && fvel < 0)
+        fvel >>= 2;
+    ang = (short)((ang + (avel * tics) / 24) & 2047);
     co = trig[(ang + 512) & 2047];
     si = trig[ang & 2047];
-    /* sub_43F18 forward is (cos, sin). Screen-right is (-sin, cos). */
-    dx = (int)(((long long)co * fvel - (long long)si * svel) >> 14);
-    dy = (int)(((long long)si * fvel + (long long)co * svel) >> 14);
+    fs = (long long)fvel * tics;
+    ss = (long long)svel * tics;
+    /* Vectors are (trig * vel * tics) >> 3, then clipmove shifts by 14.
+       Positive strafe is screen-left: left arrow raises dword_1252FC. */
+    dx = (int)((co * fs + si * ss) >> 17);
+    dy = (int)((si * fs + (long long)trig[(ang + 1536) & 2047] * ss) >> 17);
+    if (bits & 2) {
+        dx >>= 1;
+        dy >>= 1;
+    }
     if (!try_step(dx, dy)) {
         try_step(dx, 0);
         try_step(0, dy);

@@ -34,8 +34,6 @@ int input_poll(void)
 {
     SDL_Event event;
 
-    mouse_x = 0;
-    mouse_y = 0;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT)
             quit = 1;
@@ -52,27 +50,64 @@ int input_poll(void)
     return quit;
 }
 
-void input_stick(int *fvel, int *svel, int *avel, int *look)
-{
-    int fv = 0;
-    int sv = 0;
-    int av = 0;
+static int ramp_f;
+static int ramp_s;
+static int ramp_t;
 
-    if (forward)
-        fv += 125;
-    if (back)
-        fv -= 125;
-    if (strafe_right)
-        sv += 125;
-    if (strafe_left)
-        sv -= 125;
-    if (turn_right)
-        av += 48;
+static int clamp_vel(int v)
+{
+    if (v > 127)
+        return 127;
+    if (v < -128)
+        return -128;
+    return v;
+}
+
+static int friction(int v, int drag)
+{
+    if (v < 0) {
+        v += drag;
+        if (v > 0)
+            v = 0;
+    } else if (v > 0) {
+        v -= drag;
+        if (v < 0)
+            v = 0;
+    }
+    return v;
+}
+
+/* One pass of sub_102A0. Forward and strafe ±8 drag 2, turn ±16 drag 10. */
+static void ramp_step(void)
+{
     if (turn_left)
-        av -= 48;
-    av += mouse_x * 4;
-    *fvel = fv;
-    *svel = sv;
-    *avel = av;
+        ramp_t = clamp_vel(ramp_t - 16);
+    if (turn_right)
+        ramp_t = clamp_vel(ramp_t + 16);
+    if (strafe_left)
+        ramp_s = clamp_vel(ramp_s + 8);
+    if (strafe_right)
+        ramp_s = clamp_vel(ramp_s - 8);
+    if (forward)
+        ramp_f = clamp_vel(ramp_f + 8);
+    if (back)
+        ramp_f = clamp_vel(ramp_f - 8);
+    ramp_t = friction(ramp_t, 10);
+    ramp_s = friction(ramp_s, 2);
+    ramp_f = friction(ramp_f, 2);
+}
+
+void input_sample(int steps, int *fvel, int *svel, int *avel, int *look, int *mouse_turn)
+{
+    int i;
+
+    for (i = 0; i < steps; i++)
+        ramp_step();
+    *fvel = ramp_f;
+    *svel = ramp_s;
+    *avel = ramp_t;
     *look = mouse_y;
+    *mouse_turn = mouse_x * 4;
+    mouse_x = 0;
+    mouse_y = 0;
 }
