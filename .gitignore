@@ -1,6 +1,11 @@
 D3D.EXE
 DOS4GW.EXE
 SETUP.EXE
+/build/
+/build-debug/
+CMakeUserPresets.json
+*.i64
+*.idb
 *.id0
 *.id1
 *.id2
