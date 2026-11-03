@@ -12,6 +12,7 @@ extern unsigned char tspritepal[];
 extern int spritesortcnt;
 void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, short dacursectnum);
 void drawmasks(void);
+void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char flags, unsigned char pal);
 
 void draw_init(void);
 const unsigned char *framebuffer(void);

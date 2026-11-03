@@ -2352,3 +2352,94 @@ int framebuffer_pitch(void)
 {
     return pitch();
 }
+
+/* 0x4F679. Draws tile picnum unscaled at (sx,sy), or with flags: 1 centres
+   it on its picanm offsets, 2 places it in the view window (scaled when
+   that is not 320 wide) and clips it to startumost/startdmost, 4 makes it
+   translucent. Every column starts at the tile's top row even when its
+   top is clipped, and steps 320 bytes a row (0x7BC24 / 0x7BC72). */
+void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char flags, unsigned char pal)
+{
+    int w = tilesizx[picnum], h = tilesizy[picnum], x0 = sx, y0 = sy, x1, y1, xs, xe, x, ycent, vinc;
+    const unsigned char *pl;
+
+    if (w <= 0 || h <= 0 || !waloff[picnum])
+        return;
+    if (shade < 0)
+        shade = 0;
+    if (shade >= numpalookups)
+        shade = (signed char)(numpalookups - 1);
+    pl = palookup[pal] + (shade << 8);
+    setgotpic(picnum);
+    if (flags & 1) {
+        x0 = sx - ((signed char)(picanm[picnum] >> 8) + (w >> 1));
+        y0 = sy - ((signed char)(picanm[picnum] >> 16) + (h >> 1));
+    }
+    if (flags & 2) {
+        if (xdimen == 320)
+            y0 += ((windowy1 + windowy2 + 1) >> 1) - 100;
+        else {
+            x0 = (int)(((long long)(x0 - 160) * viewingrange) >> 16) + ((windowx1 + windowx2 + 1) >> 1);
+            y0 = (int)(((long long)(y0 - 100) * viewingrange) >> 16) + ((windowy1 + windowy2 + 1) >> 1);
+        }
+    }
+    if ((flags & 2) && xdimen != 320) {
+        x1 = (int)(((long long)w * viewingrange) >> 16) + x0;
+        y1 = (int)(((long long)h * viewingrange) >> 16) + y0;
+    } else {
+        x1 = x0 + w;
+        y1 = y0 + h;
+    }
+    xs = x0;
+    xe = x1 - 1;
+    if (flags & 2) {
+        if (xs < windowx1)
+            xs = windowx1;
+        if (xe > windowx2)
+            xe = windowx2;
+    } else {
+        if (xs < 0)
+            xs = 0;
+        if (xe >= 320)
+            xe = 319;
+    }
+    if (xs > xe || xe < 0 || xs > 320)
+        return;
+    ycent = 100 - ((windowy1 + windowy2 + 1) >> 1);
+    vinc = (flags & 2) ? xdimscale << 8 : 0x1000000;
+    for (x = xs; x <= xe; x++) {
+        const unsigned char *src = waloff[picnum] + h * (x - x0);
+        unsigned char *d;
+        int ya = y0, yb = y1, n;
+        unsigned v = 0;
+
+        if (flags & 2) {
+            if (xdimen != 320) {
+                int c = (int)(((long long)(x - x0) * xdimscale) >> 16);
+
+                if (c >= w)
+                    break;
+                src = waloff[picnum] + c * h;
+            }
+            if (startumost[x - windowx1] - ycent > ya)
+                ya = startumost[x - windowx1] - ycent;
+            if (yb > startdmost[x - windowx1] - ycent)
+                yb = startdmost[x - windowx1] - ycent;
+        } else {
+            if (ya < wtop)
+                ya = wtop;
+            if (yb > wbot)
+                yb = wbot;
+        }
+        if (yb <= ya)
+            continue;
+        d = frame + ya * pitch() + x;
+        for (n = yb - ya; n > 0; n--, v += (unsigned)vinc, d += 320) {
+            unsigned char c = src[v >> 24];
+
+            if (c == 255)
+                continue;
+            *d = (flags & 4) ? transluc[(*d << 8) | pl[c]] : pl[c];
+        }
+    }
+}
