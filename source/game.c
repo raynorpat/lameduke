@@ -141,11 +141,15 @@ static void write_frame(const char *path)
 
 static void present(void)
 {
+    static int presented;
     const char *shot = getenv("LAMEDUKE_FRAME");
+    const char *at = getenv("LAMEDUKE_FRAME_AT");
 
     draw_view();
     platform_present(framebuffer(), xdim, ydim);
-    if (shot && shot[0]) {
+    presented++;
+    /* Debug aid: dump the Nth frame (default 1), then exit. */
+    if (shot && shot[0] && presented >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
         write_frame(shot);
         exit(0);
     }
@@ -168,6 +172,8 @@ static int play_demo(const demo_t *demo)
 {
     int i;
     int hz = demo_hz(demo);
+    const char *shot = getenv("LAMEDUKE_FRAME");
+    const char *trace = getenv("LAMEDUKE_TRACE");
 
     for (i = 0; i < demo->count; i++) {
         int tics = demo->tics[i];
@@ -177,9 +183,13 @@ static int play_demo(const demo_t *demo)
             return 1;
         player_move(signed_byte(demo->forward[i]), signed_byte(demo->strafe[i]),
             signed_byte(demo->turn[i]), tics, demo->bits[i]);
+        if (trace && trace[0])
+            printf("sample %d %d %d %d %d %d\n", i, posx, posy, posz, ang, cursectnum);
         if (tics == 0)
             continue;
         present();
+        if (shot && shot[0])
+            continue;
         start = timer_ticks();
         while ((int)(timer_ticks() - start) < tics * 1000 / hz) {
             if (input_poll())
