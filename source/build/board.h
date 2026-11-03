@@ -91,6 +91,9 @@ int clipmove(int *x, int *y, int *z, short *sectnum, int xvect, int yvect,
     int walldist, int ceildist, int flordist, int cliptype);
 int movesprite(short s, int xchange, int ychange, int zchange, int walldist, int ceildist, int flordist,
     int cliptype, int tics);
+short lastwall(short w);
+void dragpoint(short w, int x, int y);
+int clipinsidebox(int x, int y, short w, int dist);
 int cansee(int x1, int y1, int z1, short sect1, int x2, int y2, int z2, short sect2);
 /* 0x511C4 */
 void hitscan(int xs, int ys, int zs, short sectnum, int vx, int vy, int vz,

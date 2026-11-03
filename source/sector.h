@@ -17,6 +17,8 @@ extern short numanimwalls;
 
 void doanimations(int tics);
 void activatebylotag(short lotag);
+int getanimationgoal(const int *ptr);
+void movelift(short liftspr, int dir);
 int setanimate(short sect, int *ptr, int goal, int vel);
 void operatesectors(short sn, short ii);
 void checkhitswitch(short w);

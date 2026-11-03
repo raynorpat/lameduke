@@ -41,7 +41,7 @@ int setanimate(short sect, int *ptr, int goal, int vel)
     return j;
 }
 
-static int getanimationgoal(const int *ptr)
+int getanimationgoal(const int *ptr)
 {
     int k;
 
@@ -62,8 +62,9 @@ static short sprhitag(short i)
     return i >= 0 ? sprite[i].hitag : 0;
 }
 
-/* The SE 17 lift search 0x259E0 inlines for lotag 15. */
-static void movelift(short liftspr, int dir)
+/* 0x25810, which 0x259E0 inlines for lotag 15: sets every SE 17 lift of
+   liftspr's hitag moving in dir, or stops them (sound 35) when dir is 0. */
+void movelift(short liftspr, int dir)
 {
     short j;
 
@@ -76,7 +77,7 @@ static void movelift(short liftspr, int dir)
     if (j == -1)
         dir = 0;
     else
-        spritesound(0, liftspr);
+        spritesound(dir ? 0 : 35, liftspr);
     for (j = headspritestat[3]; j >= 0; j = nextspritestat[j]) {
         if (sprite[j].lotag == 17 && sprite[j].hitag == sprite[liftspr].hitag) {
             hittype[j][0] = dir;

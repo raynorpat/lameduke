@@ -1155,3 +1155,67 @@ int cansee(int x1, int y1, int z1, short sect1, int x2, int y2, int z2, short se
     }
     return 1;
 }
+
+/* 0x5221E. The wall whose point2 is w. */
+short lastwall(short w)
+{
+    short i = w;
+    int cnt = 0x2000;
+
+    while (wall[i].point2 != w && cnt > 0) {
+        i = wall[i].point2;
+        cnt--;
+    }
+    return cnt > 0 ? i : w;
+}
+
+/* 0x52122. Moves wall point w and every point joined to it through red
+   walls, first clockwise, then (if that hit a white wall) the other way. */
+void dragpoint(short w, int x, int y)
+{
+    short t = w;
+    int cnt = 0x2000;
+
+    wall[w].x = x;
+    wall[w].y = y;
+    while (wall[t].nextwall >= 0) {
+        t = wall[wall[t].nextwall].point2;
+        wall[t].x = x;
+        wall[t].y = y;
+        if (t == w || (short)--cnt <= 0)
+            return;
+    }
+    t = w;
+    for (;;) {
+        short lw = lastwall(t);
+
+        if (wall[lw].nextwall < 0)
+            return;
+        t = wall[lw].nextwall;
+        wall[t].x = x;
+        wall[t].y = y;
+        if (t == w || (short)--cnt <= 0)
+            return;
+    }
+}
+
+/* 0x4AF61. Whether wall w passes within dist of (x,y). */
+int clipinsidebox(int x, int y, short w, int dist)
+{
+    int r2 = dist << 1, x1 = wall[w].x + dist - x, y1 = wall[w].y + dist - y;
+    int x2 = wall[wall[w].point2].x + dist - x, y2 = wall[wall[w].point2].y + dist - y, a, b, c;
+
+    if ((x1 < 0 && x2 < 0) || (x1 >= r2 && x2 >= r2))
+        return 0;
+    if ((y1 < 0 && y2 < 0) || (y1 >= r2 && y2 >= r2))
+        return 0;
+    c = imul32(y2 - y1, -x1);
+    a = imul32(x2 - x1, -y1) - c;
+    b = imul32(r2 - y1, x2 - x1) - c;
+    if ((a <= 0) != (b <= 0))
+        return 1;
+    a = imul32(-y1, x2 - x1) - imul32(y2 - y1, r2 - x1);
+    if ((b <= 0) != (a <= 0))
+        return 1;
+    return (a <= 0) != (imul32(x2 - x1, r2 - y1) - imul32(y2 - y1, r2 - x1) <= 0);
+}
