@@ -351,10 +351,8 @@ int main(int argc, char **argv)
             game_volume = demo.volume;
             game_level = demo.level;
             game_skill = demo.skill;
-            /* 0x1B810 reads the demo header into player 0 */
-            ps[0].volume = (unsigned char)demo.volume;
-            ps[0].level = (unsigned char)demo.level;
-            ps[0].skill = (unsigned char)demo.skill;
+            /* 0x1B810 starts a new game from each demo's header. */
+            newgame(game_volume, game_level, game_skill);
             enterlevel(2);
             if (play_demo(&demo)) {
                 demo_free(&demo);
