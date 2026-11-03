@@ -398,6 +398,104 @@ static void displayweapon(short p)
     overlaypal((syncavel[p] >> 3) + 190 - aim, bob + 235 - yb - hz, 1160, shade, 3);
 }
 
+/* 0x73169 base 10, drawn as 0x17890 draws it: the ones digit sits on x and
+   each earlier glyph is 6 px left. The tile is the character plus 0x536. */
+static void drawdigits(int x, int y, int value)
+{
+    char buf[16], rev[12];
+    int n = 0, d = 0, i;
+    unsigned int u = (unsigned int)value;
+
+    if (value < 0) {
+        buf[n++] = '-';
+        u = 0u - u;
+    }
+    do {
+        rev[d++] = (char)('0' + u % 10u);
+        u /= 10u;
+    } while (u);
+    while (d)
+        buf[n++] = rev[--d];
+    for (i = n; i > 0; i--) {
+        rotatesprite(x, y, (short)((unsigned char)buf[i - 1] + 1334), 0, 0, 0);
+        x -= 6;
+    }
+}
+
+/* Ammo digits, the centred weapon icon, and one pip per four rounds. */
+static void drawammo(int amount, int icon)
+{
+    int i;
+
+    drawdigits(209, 186, amount);
+    rotatesprite(160, 192, (short)icon, 0, 1, 0);
+    for (i = 0; i < 25; i++)
+        if (i < amount >> 2)
+            rotatesprite(3 * i + 216, 186, 1392, 0, 0, 0);
+}
+
+/* 0x17890. Border, score, health and ammo when the view is inset, plus the
+   inventory panel. A sector lotag of 15 lays tile 1136 over the view. */
+static void displaystatus(short p)
+{
+    playertype *pl = &ps[p];
+    int i;
+
+    if (pl->f02 != 3)
+        return;
+    if ((sector[pl->cursectnum].lotag & 0x7FFF) == 15)
+        overlaypal(160, 120, 1136, 0, 1);
+    if (pl->w4a >= 0) {
+        rotatesprite(0, 0, 1380, 0, 0, 0);
+        rotatesprite(160, 189, 1381, 0, 1, 0);
+        drawdigits(82, 6, pl->f36);
+        drawdigits(119, 186, pl->w54);
+        for (i = 0; i < 25; i++)
+            if (i < pl->w54 >> 2)
+                rotatesprite(3 * i + 30, 186, 1392, 0, 0, 0);
+        switch (pl->w7e) {
+        case 191:
+            drawammo(pl->w4c, 1401);
+            break;
+        case 389:
+        case 1230:
+            drawammo(pl->w4e, 1400);
+            break;
+        case 563:
+            drawammo(pl->w52, 1403);
+            break;
+        case 721:
+        case 1140:
+            drawammo(pl->w50, 1402);
+            break;
+        }
+    }
+    if (pl->b92) {
+        rotatesprite(0, 28, 1398, 0, 0, 0);
+        if (pl->b95)
+            rotatesprite(39, 41, 1399, 0, 0, 0);
+        if (pl->b96)
+            rotatesprite(39, 66, 1399, 0, 0, 0);
+        if (pl->b93)
+            rotatesprite(39, 93, 1399, 0, 0, 0);
+        /* w58 is -1 after resetplayer; any non-zero still draws the mark. */
+        if (pl->w58)
+            rotatesprite(39, 119, 1399, 0, 0, 0);
+        if (pl->b94)
+            rotatesprite(39, 145, 1399, 0, 0, 0);
+        if (pl->b99)
+            rotatesprite(13, 39, 717, 0, 0, 0);
+        if (pl->b9a)
+            rotatesprite(14, 64, 719, 0, 0, 0);
+        if (pl->b97)
+            rotatesprite(13, 90, 716, 0, 0, 0);
+        if (pl->b9b)
+            rotatesprite(13, 117, 718, 0, 0, 0);
+        if (pl->b98)
+            rotatesprite(13, 141, 713, 0, 0, 0);
+    }
+}
+
 /* 0x14050. Draws player p's view, or the demo camera's. */
 void displayrooms(short p)
 {
@@ -423,8 +521,10 @@ void displayrooms(short p)
     }
     drawmasks();
     /* pending: the tile 572 floor reflection over rows 99..199 */
-    /* The exe draws the weapon after this view, unless a camera or the
-       w56 view is up (that one is 0x1A420, still to lift). */
-    if (cameraspr < 0 && pl->w56 < 0)
+    /* The exe draws the weapon, then the status bar, after this view,
+       unless a camera or the w56 view is up (that one is 0x1A420). */
+    if (cameraspr < 0 && pl->w56 < 0) {
         displayweapon(p);
+        displaystatus(p);
+    }
 }
