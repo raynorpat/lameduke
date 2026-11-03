@@ -1554,7 +1554,7 @@ static void movereactor(short i, short sect, int dist)
 static void moveturret(short i, short p, short sect, int dist)
 {
     spritetype *s = &sprite[i];
-    int *t = hittype[i], k;
+    int *t = hittype[i];
     playertype *pl = &ps[p];
 
     if (ifhitweapon(i) >= 0) {
