@@ -13,4 +13,11 @@ const unsigned char *tables_dat(void);
    NULL until loadtables succeeds. */
 const short *sintable(void);
 
+extern int sqrttable[2048];
+void initmath(void);
+int tablesqrt(int v);
+int ksqrt(int v);
+int krand(void);
+int getangle(int xvect, int yvect);
+
 #endif

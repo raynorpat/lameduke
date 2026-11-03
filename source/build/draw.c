@@ -51,7 +51,6 @@ static int lwall[MAXXDIM + 4];               /* 0x23C3FC */
 static int skyswall[MAXXDIM + 1], skylwall[MAXXDIM + 1]; /* 0x137590, 0x136B90 */
 static short radarang[MAXXDIM + 1];          /* word_198E90 */
 static int lastx[MAXYDIM + 2];               /* 0x134E08, indexed by y */
-static int sqrttable[2048];                  /* dword_180E90 */
 static int horizlookup[1024];                /* dword_135AD0: 65536/(i-511), centred at 0x1362D0 */
 
 /* Scan and bunch lists (0x188E90..0x17E590). */
@@ -102,38 +101,6 @@ static int imul(int a, int b)
 static int ksgn(int v)
 {
     return (v > 0) - (v < 0);
-}
-
-/* 0x4BBA8. Newton's iteration from 128. */
-static int newton_sqrt(int n)
-{
-    int x = 128;
-    int old;
-
-    if (n < 0)
-        return -1;
-    do {
-        old = x;
-        x = (x + n / x) >> 1;
-    } while ((old - x > 1) || (x - old > 1));
-    return x;
-}
-
-/* The msqrt that ceilscan uses when it aligns a flat to its first wall. */
-static int tablesqrt(int v)
-{
-    int b;
-    int sh;
-
-    if (v < 0)
-        v = -v;
-    for (b = 31; b > 0 && !((unsigned)v >> b); b--)
-        ;
-    if (b >= 11) {
-        sh = (b - 9) & 0xFE;
-        return sqrttable[(unsigned)v >> sh] << (sh >> 1);
-    }
-    return sqrttable[v];
 }
 
 /* 0x509E2 */
@@ -2364,8 +2331,7 @@ void draw_init(void)
 {
     int i;
 
-    for (i = 0; i < 2048; i++)
-        sqrttable[i] = newton_sqrt(i << 20);
+    initmath();
     for (i = 0; i <= MAXYDIM + 1; i++)
         lastx[i] = -1;
     for (i = 0; i < 1024; i++)

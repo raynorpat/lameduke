@@ -79,6 +79,22 @@ int inside(int x, int y, short sect);
 
 /* 0x50B40. Returns the sprite index taken from the free list, or -1. */
 int insertsprite(short sectnum, short statnum);
+void deletesprite(short s);
+int changespritesect(short s, short sectnum);
+int changespritestat(short s, short statnum);
+int setsprite(short s, int x, int y, int z);
+void updatesector(int x, int y, short *sectnum);
+void rotatepoint(int xpivot, int ypivot, int x, int y, short daang, int *x2, int *y2);
+int clipinsideboxline(int x, int y, int x1, int y1, int x2, int y2, int walldist);
+/* 0x5225C. Returns the tag of the first thing hit: wall+0x8000, sprite+0xC000, or 0. */
+int clipmove(int *x, int *y, int *z, short *sectnum, int xvect, int yvect,
+    int walldist, int ceildist, int flordist, int cliptype);
+/* 0x511C4 */
+void hitscan(int xs, int ys, int zs, short sectnum, int vx, int vy, int vz,
+    short *hitsect, short *hitwall, short *hitsprite, int *hitx, int *hity, int *hitz);
+/* 0x55667 */
+void getzrange(int x, int y, int z, short sectnum, int *ceilz, int *ceilhit, int *florz, int *florhit,
+    int walldist, int cliptype);
 
 /* One sync sample from sub_31410. Velocities are the signed ramp bytes.
    tics is the clock delta (byte_1257C1). bits bit 1 halves the step. */
