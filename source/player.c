@@ -842,3 +842,71 @@ void playerkeys(short p)
         }
     }
 }
+
+short neartagsector, neartagwall, neartagsprite; /* word_1253A4, word_1253A6, word_1253A2 */
+int neartaghitdist;                             /* dword_1252F4 */
+
+/* 0x2C5E0. Player p's sector specials (secret, level end) and the use key:
+   leaving a camera, a viewscreen, then the door or switch in front of
+   them, then the sector they stand in. The exe inlines operatesectors. */
+void checksectors(short p)
+{
+    playertype *pl = &ps[p];
+    unsigned short lt = (unsigned short)sector[pl->cursectnum].lotag;
+    short i;
+
+    if (lt == 0x7FFF) {
+        sector[pl->cursectnum].lotag = 0;
+        quote(9);
+        pl->baa++;
+        return;
+    }
+    if (lt == 0xFFFF) {
+        pl->gm = 8;
+        return;
+    }
+    if (pl->gm & 0x10)
+        return;
+    if (!(syncbits[p] & 0x10) && syncbits[p] >= 0) {
+        pl->ba2 = 0;
+        return;
+    }
+    if (pl->ba2)
+        return;
+    pl->ba2 = 1;
+    neartag(pl->posx, pl->posy, pl->posz + 5120, pl->cursectnum, pl->ang, &neartagsector, &neartagwall,
+        &neartagsprite, &neartaghitdist, 1024);
+    /* shortcut: the exe reads wall[-1] / sector[-1] when nothing is near; those reads are skipped */
+    if ((neartagwall >= 0 && wall[neartagwall].picnum == 180) || pl->w56 >= 0) {
+        if (syncbits[p] >= 0) {
+            for (i = headspritestat[1]; i >= 0; i = nextspritestat[i])
+                if (sprite[i].picnum == 265 && sprite[i].yvel == 0) {
+                    sprite[i].yvel = 1;
+                    pl->w56 = i;
+                    return;
+                }
+        }
+        pl->w56 = -1;
+        pl->posx = pl->f1a;
+        pl->posy = pl->f1e;
+        pl->posz = pl->f22;
+        pl->ang = pl->f42;
+        for (i = headspritestat[1]; i >= 0; i = nextspritestat[i])
+            if (sprite[i].picnum == 265)
+                sprite[i].yvel = 0;
+    }
+    if (neartagsector >= 0) {
+        lt = sector[neartagsector].lotag & 0x7FFF;
+        if (lt == 9 || (lt >= 15 && lt <= 23) || (lt >= 25 && lt <= 27) || lt == 29) {
+            operatesectors(neartagsector, pl->i);
+            return;
+        }
+    }
+    lt = sector[pl->cursectnum].lotag & 0x7FFF;
+    if ((lt >= 15 && lt <= 19) || (lt >= 26 && lt <= 28)) {
+        operatesectors(pl->cursectnum, pl->i);
+        return;
+    }
+    if (neartagwall >= 0)
+        checkhitswitch(neartagwall);
+}

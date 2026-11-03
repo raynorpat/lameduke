@@ -1219,3 +1219,111 @@ int clipinsidebox(int x, int y, short w, int dist)
         return 1;
     return (a <= 0) != (imul32(x2 - x1, r2 - y1) - imul32(y2 - y1, r2 - x1) <= 0);
 }
+
+static int mulscale14(int a, int b)
+{
+    return (int)(((long long)a * b) >> 14);
+}
+
+/* 0x51895. What a use press from (xs,ys,zs) facing ange reaches within
+   range: the nearest tagged sector beyond a wall, tagged wall, and tagged
+   sprite, and the distance along the view to the last one found. */
+void neartag(int xs, int ys, int zs, short sectnum, short ange, short *neartagsector, short *neartagwall,
+    short *neartagsprite, int *neartaghitdist, int range)
+{
+    static short list[MAXSECTORS];
+    int vx, vy, xe, ye, ze, cnt = 1, k;
+    const short *sinv = sintable();
+
+    *neartagsector = -1;
+    *neartagwall = -1;
+    *neartagsprite = -1;
+    *neartaghitdist = 0;
+    if (sectnum == -1)
+        return;
+    vx = mulscale14(range, sinv[(ange + 2560) & 2047]);
+    vy = mulscale14(range, sinv[(ange + 2048) & 2047]);
+    xe = vx + xs;
+    ye = vy + ys;
+    ze = zs;
+    list[0] = sectnum;
+    for (k = 0; k < cnt; k++) {
+        short dasect = list[k], j;
+        int w, end = sector[dasect].wallptr + sector[dasect].wallnum - 1;
+
+        for (w = sector[dasect].wallptr; w <= end; w++) {
+            short ns = wall[w].nextsector;
+            int good = 0, x1, y1, x2, y2, ix, iy, iz, m;
+
+            if (ns >= 0)
+                good = (sector[ns].lotag | sector[ns].hitag) != 0;
+            if (wall[w].lotag | wall[w].hitag)
+                good |= 2;
+            if (good == 0 && ns < 0)
+                continue;
+            x1 = wall[w].x;
+            y1 = wall[w].y;
+            x2 = wall[wall[w].point2].x;
+            y2 = wall[wall[w].point2].y;
+            if (imul32(y2 - ys, x1 - xs) < imul32(y1 - ys, x2 - xs)
+                || lintersect(xs, ys, zs, xe, ye, ze, x1, y1, x2, y2, &ix, &iy, &iz, 0) != 1)
+                continue;
+            if (good & 1) {
+                *neartagsector = ns;
+                *neartaghitdist = mulscale14(sinv[(ange + 2048) & 2047], iy - ys) + mulscale14(sinv[(ange + 2560) & 2047], ix - xs);
+                xe = ix;
+                ye = iy;
+                ze = iz;
+            }
+            if (good & 2) {
+                *neartagwall = (short)w;
+                *neartaghitdist = mulscale14(sinv[(ange + 2048) & 2047], iy - ys) + mulscale14(sinv[(ange + 2560) & 2047], ix - xs);
+                xe = ix;
+                ye = iy;
+                ze = iz;
+            }
+            if (ns >= 0) {
+                for (m = 0; m < cnt; m++)
+                    if (list[m] == ns)
+                        break;
+                if (m == cnt && cnt < MAXSECTORS)
+                    list[cnt++] = ns;
+            }
+        }
+        for (j = headspritesect[dasect]; j != -1; j = nextspritesect[j]) {
+            spritetype *spr = &sprite[j];
+            int dx, dy, topt, bot, intz, cross, a, b, r, ix, iy, q;
+
+            if ((spr->lotag | spr->hitag) == 0)
+                continue;
+            dx = spr->x - xs;
+            dy = spr->y - ys;
+            topt = imul32(dy, vy) + imul32(dx, vx);
+            if (topt <= 0)
+                continue;
+            bot = imul32(vx, vx) + imul32(vy, vy);
+            if (bot == 0)
+                continue;
+            intz = zs;
+            if (!(spr->z >= intz && spr->z - ((spr->yrepeat * tilesizy[spr->picnum]) << 8 >> 6) <= intz))
+                continue;
+            cross = imul32(dy, vx) - imul32(dx, vy);
+            a = (int)((long long)cross * vx / bot);
+            b = (int)((long long)cross * vy / bot);
+            r = spr->xrepeat * tilesizx[spr->picnum];
+            if (imul32(b, b) + imul32(a, a) > (imul32(r, r) >> 7))
+                continue;
+            q = (int)((long long)topt * vx / bot);
+            ix = q + xs;
+            iy = (int)((long long)topt * vy / bot) + ys;
+            if ((q < 0 ? -q : q) + (iy - ys < 0 ? ys - iy : iy - ys)
+                < (xe - xs < 0 ? xs - xe : xe - xs) + (ye - ys < 0 ? ys - ye : ye - ys)) {
+                *neartagsprite = j;
+                *neartaghitdist = mulscale14(sinv[(ange + 2048) & 2047], iy - ys) + mulscale14(sinv[(ange + 2560) & 2047], ix - xs);
+                xe = ix;
+                ye = iy;
+                ze = intz;
+            }
+        }
+    }
+}
