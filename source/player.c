@@ -11,6 +11,9 @@
 #include "board.h"
 #include "math.h"
 #include "tiles.h"
+#include "display.h"
+#include "draw.h"
+#include "engine.h"
 
 #include "fx_man.h"
 
@@ -666,4 +669,176 @@ void resetplayer(short p)
     pl->ba1 = 6;
     pl->ba3 = 1;
     pl->f06 = 768;
+}
+
+unsigned char menucursor; /* byte_1BCA11 */
+int menupage;             /* dword_1252F0: which menu or help screen b8a bit 0 opens */
+
+/* 0x3E0D0. The local player's view window, w4a pixels in from each edge. */
+void viewsize(short p)
+{
+    int b = ps[p].w4a < 0 ? 0 : ps[p].w4a;
+
+    if (p == myconnectindex)
+        setview(b, b, 319 - b, 199 - b);
+}
+
+static void resizeview(short p)
+{
+    if (setup_byte(0) == 7)
+        setview(0, 0, 639, 479);
+    else
+        viewsize(p);
+}
+
+/* 0x29720. Player p's one-shot keys: view size and map zoom every tic,
+   and once per press pause, menus, the map, weapon picks, inventory,
+   and with /d the door cheat. */
+void playerkeys(short p)
+{
+    playertype *pl = &ps[p];
+    int bits = syncbits[p];
+    short s, j;
+
+    if ((bits & 0x10000) && pl->ba3 == 0)
+        pl->ba3 = 1;
+    if (pl->f02 == 2) {
+        if ((bits & 0x80000) && pl->f06 < 4096)
+            pl->f06 += pl->f06 >> 3;
+        if ((bits & 0x100000) && pl->f06 > 48)
+            pl->f06 -= pl->f06 >> 3;
+    } else {
+        if (bits & 0x80000) {
+            if (pl->w4a > -4)
+                pl->w4a -= 4;
+            resizeview(p);
+        }
+        if (bits & 0x100000) {
+            if (pl->w4a < 64)
+                pl->w4a += 4;
+            resizeview(p);
+        }
+    }
+    if ((unsigned)bits < 0xFF) {
+        pl->ba6 = 0;
+        return;
+    }
+    if (pl->ba6)
+        return;
+    pl->ba6 = 1;
+    if (bits & 0x200000)
+        gamepaused = !gamepaused;
+    if (gamepaused)
+        return;
+    if (bits < 0 && !(pl->gm & 2) && pl->w56 == -1) {
+        menucursor = 0;
+        menupage = 0;
+        pl->gm |= 1;
+        if (pl->f02 == 2) {
+            pl->f02 = 3;
+            if (p == myconnectindex)
+                setgamemode();
+        }
+    }
+    if (bits & 0x400000) {
+        if (pl->f02 == 3) {
+            pl->f02 = 2;
+            /* pending: 0x53F42 switches the local player to the 640x350 map mode */
+        } else {
+            pl->f02 = 3;
+            setgamemode();
+            viewsize(p);
+            /* pending: 0x14050 redraws the status bar */
+        }
+    }
+    if (bits & 0x20000)
+        pl->b92 ^= 1;
+    if ((pl->ba1 & 0x7F) == 6) {
+        if (bits & 0x100)
+            addweapon(p, 1230, 1);
+        if ((bits & 0x200) && (pl->b9d || debugmode))
+            addweapon(p, 191, 1);
+        if ((bits & 0x400) && (pl->b9e || debugmode))
+            addweapon(p, 389, 1);
+        if ((bits & 0x800) && (pl->b9f || debugmode))
+            addweapon(p, 721, 1);
+        if ((bits & 0x1000) && (pl->ba0 || debugmode))
+            addweapon(p, 563, 1);
+    }
+    if ((bits & 0x1000000) && (pl->b99 || debugmode)) {
+        if (debugmode)
+            pl->b99 = 1;
+        pl->b95 = pl->b95 == 1 ? 0 : 0x80;
+    }
+    if ((bits & 0x2000000) && (pl->b9a || debugmode)) {
+        if (debugmode)
+            pl->b9a = 1;
+        pl->b96 = pl->b96 == 0 ? 32 : 0;
+    }
+    if ((bits & 0x4000000) && (pl->b97 || debugmode)) {
+        if (debugmode)
+            pl->b97 = 1;
+        pl->b93 ^= 1;
+    }
+    if ((bits & 0x8000000) && (pl->b9b || debugmode)) {
+        /* The holoduke: a stand-in player sprite that moveplayers keeps alive. */
+        if (debugmode)
+            pl->b9b = 1;
+        if (pl->w58 != 0)
+            pl->w58 = 0;
+        else {
+            pl->w58 = EGS(pl->cursectnum, pl->posx, pl->posy, pl->posz, 0, 283, -16, 48, 48, pl->ang, 0, 0, -1, 10);
+            hittype[pl->w58][0] = p;
+        }
+    }
+    if ((bits & 0x10000000) && (pl->b98 || debugmode)) {
+        if (debugmode)
+            pl->b98 = 1;
+        pl->b94 = !pl->b94;
+        spritesound(pl->b94 ? 18 : 27, pl->i);
+    }
+    if ((bits & 0x40000000) && pl->w80 == -1)
+        pl->ba1 = (pl->ba1 & 0x80) ? 5 : 0x81;
+    if (!debugmode) {
+        if (bits & 0x1000000) {
+            menupage = 20;
+            pl->gm |= 1;
+        }
+        if (bits & 0x2000000) {
+            menupage = 50;
+            pl->gm |= 1;
+        }
+        if (bits & 0x4000000) {
+            menupage = 10;
+            pl->gm |= 1;
+        }
+        return;
+    }
+    if (!(bits & 0x800000))
+        return;
+    /* /d: unlock and operate every door-type sector, then flip the force fields. */
+    quote(11);
+    for (s = 0; s < numsectors; s++) {
+        int lt = sector[s].lotag & 0x0FFF;
+
+        if (lt < 15 || lt > 29 || lt == 24)
+            continue;
+        if (sector[s].lotag & 0xBFFF)
+            sector[s].lotag &= ~0x4000;
+        operatesectors(s, pl->i);
+    }
+    for (j = 0; j < numanimwalls; j++) {
+        short w = animwall[j].wallnum;
+
+        if (wall[w].overpicnum < 1184 || wall[w].overpicnum > 1186)
+            continue;
+        animwall[j].tag = 0;
+        if (wall[w].cstat) {
+            wall[w].cstat = 0;
+            sector[wall[w].nextsector].floorpal = sector[wall[w].nextsector].ceilingpal = 0;
+        } else {
+            wall[w].cstat = 85;
+            sector[wall[w].nextsector].floorpal = sector[wall[w].nextsector].ceilingpal = 2;
+        }
+    }
 }

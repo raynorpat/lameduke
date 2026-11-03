@@ -16,6 +16,10 @@ void addweapon(short p, short weapon, int force);
 void shoot(short i, short atwith, int mode);
 void processinput(short snum);
 void resetplayer(short p);
+void playerkeys(short p);
+void viewsize(short p);
+extern unsigned char menucursor;
+extern int menupage;
 
 int getincangle(int a, int na, int shift);
 int ssp(short i, int cliptype);
