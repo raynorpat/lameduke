@@ -20,7 +20,6 @@ int numsprites;
 int posx;
 int posy;
 int posz;
-int horiz;
 short ang;
 short cursectnum;
 
@@ -194,9 +193,6 @@ int loadboard(const char *filename)
     posz = pz;
     ang = startang;
     cursectnum = startsect;
-    horiz = ydim / 2;
-    if (cursectnum >= 0 && cursectnum < numsectors)
-        posz = sector[cursectnum].floorz - 9216;
     return 0;
 }
 
@@ -246,120 +242,6 @@ int inside(int x, int y, short sect)
         }
     }
     return count;
-}
-
-static int sector_at(int x, int y, short hint)
-{
-    int w;
-    int i;
-
-    if (inside(x, y, hint) == 1)
-        return hint;
-    if (hint >= 0 && hint < numsectors) {
-        int first = sector[hint].wallptr;
-        int last = first + sector[hint].wallnum;
-        for (w = first; w < last; w++) {
-            short next;
-            if (w < 0 || w >= numwalls)
-                break;
-            next = wall[w].nextsector;
-            if (next >= 0 && inside(x, y, next) == 1)
-                return next;
-        }
-    }
-    for (i = 0; i < numsectors; i++) {
-        if (inside(x, y, (short)i) == 1)
-            return i;
-    }
-    return -1;
-}
-
-static int can_stand(short from, short to)
-{
-    int step;
-    int eye;
-    int gap;
-
-    if (to < 0 || to >= numsectors)
-        return 0;
-    step = sector[from].floorz - sector[to].floorz;
-    if (step > 4096)
-        return 0;
-    gap = sector[to].floorz - sector[to].ceilingz;
-    if (gap < 4096)
-        return 0;
-    eye = sector[to].floorz - 9216;
-    if (eye < sector[to].ceilingz + 512)
-        return 0;
-    return 1;
-}
-
-static int try_step(int dx, int dy)
-{
-    int nx;
-    int ny;
-    int dest;
-
-    nx = posx + dx;
-    ny = posy + dy;
-    dest = sector_at(nx, ny, cursectnum);
-    if (dest < 0)
-        return 0;
-    if (dest != cursectnum && cursectnum >= 0 && !can_stand(cursectnum, (short)dest))
-        return 0;
-    posx = nx;
-    posy = ny;
-    cursectnum = (short)dest;
-    posz = sector[cursectnum].floorz - 9216;
-    return 1;
-}
-
-void player_move(int fvel, int svel, int avel, int tics, int bits)
-{
-    const short *trig;
-    int co;
-    int si;
-    int dx;
-    int dy;
-    long long fs;
-    long long ss;
-
-    /* sub_31410 multiplies by the tic count once. A zero delta does not move. */
-    if (tics <= 0)
-        return;
-    trig = sintable();
-    if (!trig)
-        return;
-    /* Sector lotag 2 (high bit ignored) quarters a negative forward byte. */
-    if (cursectnum >= 0 && cursectnum < numsectors
-        && (sector[cursectnum].lotag & 0x7fff) == 2 && fvel < 0)
-        fvel >>= 2;
-    ang = (short)((ang + (avel * tics) / 24) & 2047);
-    co = trig[(ang + 512) & 2047];
-    si = trig[ang & 2047];
-    fs = (long long)fvel * tics;
-    ss = (long long)svel * tics;
-    /* Vectors are (trig * vel * tics) >> 3, then clipmove shifts by 14.
-       Positive strafe is screen-left: left arrow raises dword_1252FC. */
-    dx = (int)((co * fs + si * ss) >> 17);
-    dy = (int)((si * fs + (long long)trig[(ang + 1536) & 2047] * ss) >> 17);
-    if (bits & 2) {
-        dx >>= 1;
-        dy >>= 1;
-    }
-    if (!try_step(dx, dy)) {
-        try_step(dx, 0);
-        try_step(0, dy);
-    }
-}
-
-void player_look(int dh)
-{
-    horiz += dh;
-    if (horiz < 8)
-        horiz = 8;
-    if (horiz > ydim - 8)
-        horiz = ydim - 8;
 }
 
 /* ---- Movement and collision (0x50867..0x56414) ---- */

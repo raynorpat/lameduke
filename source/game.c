@@ -227,7 +227,7 @@ static int play_level(int record)
         int irqs;
         int steps;
         int per_irq;
-        int fv, sv, av, look, mouse_turn;
+        int fv, sv, av, bits;
 
         /* Music byte selects the 6-step ISR. The PIT itself stays at 120 Hz. */
         per_irq = setup_byte(2) != 0 ? 6 : 1;
@@ -244,23 +244,22 @@ static int play_level(int record)
         steps = irqs * per_irq;
         if (steps > 255)
             steps = 255;
-        input_sample(steps, &fv, &sv, &av, &look, &mouse_turn);
-        /* pending: look keys and mouse turn feed the sync bits with the input task */
-        (void)look;
-        (void)mouse_turn;
+        input_sample(steps, &fv, &sv, &av, &bits);
         syncfvel[0] = (signed char)fv;
         syncsvel[0] = (signed char)sv;
         syncavel[0] = (signed char)av;
-        syncbits[0] = 0;
+        syncbits[0] = bits;
         synctics = (unsigned char)steps;
         domovethings();
+        /* pending: gm bit 0 opens the menus and help pages (Task 9); dropped until then */
+        ps[myconnectindex].gm &= ~1;
         if (record && rec_grow(&rec, &cap) == 0) {
             int n = rec.count;
             rec.forward[n] = store_byte(fv);
             rec.strafe[n] = store_byte(sv);
             rec.turn[n] = store_byte(av);
             rec.tics[n] = (unsigned char)steps;
-            rec.bits[n] = 0;
+            rec.bits[n] = bits;
             rec.count = n + 1;
         }
         present();

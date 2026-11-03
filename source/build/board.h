@@ -67,7 +67,6 @@ extern int numsprites;
 extern int posx;
 extern int posy;
 extern int posz;
-extern int horiz;
 extern short ang;
 extern short cursectnum;
 
@@ -106,7 +105,5 @@ void getzrange(int x, int y, int z, short sectnum, int *ceilz, int *ceilhit, int
 
 /* One sync sample from sub_31410. Velocities are the signed ramp bytes.
    tics is the clock delta (byte_1257C1). bits bit 1 halves the step. */
-void player_move(int fvel, int svel, int avel, int tics, int bits);
-void player_look(int dh);
 
 #endif

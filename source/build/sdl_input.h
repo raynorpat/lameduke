@@ -6,8 +6,8 @@
 
 int input_poll(void);
 
-/* Run `steps` of the sub_102A0 ramp, then return the velocities a demo stores.
-   mouse_turn is an extra angle in Build units and is not part of the ramp. */
-void input_sample(int steps, int *fvel, int *svel, int *avel, int *look, int *mouse_turn);
+/* Run `steps` of the 0x102A0 key ramp, then getinput 0x30E60: the mouse joins
+   the ramp and the keys pack into the sync bits. */
+void input_sample(int steps, int *fvel, int *svel, int *avel, int *bits);
 
 #endif

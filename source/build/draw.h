@@ -14,7 +14,6 @@ void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, sho
 void drawmasks(void);
 
 void draw_init(void);
-void draw_view(void);
 const unsigned char *framebuffer(void);
 int framebuffer_pitch(void);
 

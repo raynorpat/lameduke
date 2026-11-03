@@ -2343,14 +2343,6 @@ void draw_init(void)
             horizlookup[i] = 65536 / (i - 511);
 }
 
-void draw_view(void)
-{
-    if (!sintable() || !palookup[0])
-        return;
-    drawrooms(posx, posy, posz, ang, horiz, cursectnum);
-    drawmasks();
-}
-
 const unsigned char *framebuffer(void)
 {
     return frame;
