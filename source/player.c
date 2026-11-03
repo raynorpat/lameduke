@@ -636,3 +636,34 @@ domove:
     weapons(snum);
     (void)d;
 }
+
+/* 0x21DE0. Puts player p back at its start with full health. */
+void resetplayer(short p)
+{
+    playertype *pl = &ps[p];
+
+    pl->horiz = 100;
+    pl->f3a = 0;
+    pl->posx = pl->oposx;
+    pl->posy = pl->oposy;
+    pl->posz = pl->oposz;
+    pl->ba4 = 0;
+    pl->ang = pl->oang;
+    pl->cursectnum = pl->ocursect;
+    pl->b8f = 0;
+    pl->lookang = (short)(256 - (krand() & 512));
+    pl->w5a = 0;
+    pl->f26 = 0;
+    pl->b8b = 0;
+    pl->w80 = -1;
+    pl->w58 = -1;
+    pl->w56 = -1;
+    pl->ba8 = 0;
+    pl->w54 = actorscrptr[APLAYER] ? (short)script[actorscrptr[APLAYER]] : 100;
+    pl->w82 = -1;
+    pl->b90 = 0;
+    pl->w7c = 5;
+    pl->ba1 = 6;
+    pl->ba3 = 1;
+    pl->f06 = 768;
+}

@@ -3,6 +3,7 @@
 #include "actors.h"
 #include "global.h"
 #include "gamedef.h"
+#include "sector.h"
 
 #include "board.h"
 #include "math.h"
@@ -552,4 +553,116 @@ short spawn(short j, short pn)
         break;
     }
     return i;
+}
+
+/* 0x3E700. The turn from a toward na, taking the short way round. */
+int getincangle(int a, int na, int shift)
+{
+    na &= 2047;
+    a &= 2047;
+    if (abs(a - na) >= 1024)
+        return (((a + 1024) & 2047) - na) >> shift;
+    return (na - a) >> shift;
+}
+
+/* 0x35600. Moves sprite i along its ang, xvel and zvel; 1 when nothing was hit. */
+int ssp(short i, int cliptype)
+{
+    spritetype *s = &sprite[i];
+
+    return movesprite(i, (s->xvel * sintable()[(s->ang + 512) & 2047]) >> 14,
+               (s->xvel * sintable()[s->ang & 2047]) >> 14, s->zvel, 128, 1024, 1024, cliptype, synctics)
+        == 0;
+}
+
+/* 0x35480. Every actor (stat 1, 6, 10) within r turns away from i and gets
+   a damage sprite of the given strength. */
+void hitradius(short i, int r, int damage)
+{
+    static const unsigned char stats[3] = { 1, 6, 10 };
+    int k;
+    short j;
+
+    for (k = 0; k < 3; k++)
+        for (j = headspritestat[stats[k]]; j >= 0; j = nextspritestat[j]) {
+            unsigned dx = (unsigned)(sprite[i].x - sprite[j].x), dy = (unsigned)(sprite[i].y - sprite[j].y);
+
+            if ((int)(dy * dy + dx * dx) >= r * r)
+                continue;
+            sprite[j].ang = (short)getangle(sprite[j].x - sprite[i].x, sprite[j].y - sprite[i].y);
+            if (sprite[j].extra >= 0) {
+                short d = EGS(sprite[j].sectnum, sprite[j].x, sprite[j].y, sprite[j].z, 0, 46, -16, 0, 0,
+                    sprite[j].ang, 32, 0, sprite[j].owner, 4);
+                sprite[d].extra = (short)damage;
+            }
+        }
+}
+
+/* 0x35690 */
+void nuke(int x, int y, int z, short i)
+{
+    EGS(sprite[i].sectnum, x, y, z + 5120, 2, 174, -127, 96, 48, 0, 0, 0, i, 5);
+    spawn(i, 1370);
+}
+
+/* 0x35A60. A tagged sector closed below 7168 units squashes i; -1 when it
+   does not. */
+short ifsquished(short i, short p)
+{
+    sectortype *sc = &sector[sprite[i].sectnum];
+    short pic;
+
+    if (sc->floorz - sc->ceilingz >= 7168 || (sc->lotag & 0x8000) || (sc->lotag & 0x7FFF) == 0)
+        return -1;
+    if ((sc->lotag & 0x7FFF) != 23)
+        sc->ceilingz -= 1024;
+    sprite[i].z = sc->floorz;
+    pic = sprite[i].picnum;
+    if (pic == 408 || pic == 490 || pic == 631 || pic == 1536 || pic == 1680 || pic == 1820) {
+        sprite[i].xvel = 0;
+        sprite[i].cstat &= 0xFE;
+        ps[p].bad++;
+        quote(10);
+    } else if (pic == 579) {
+        sprite[i].xvel = 0;
+        ps[p].bad++;
+        quote(10);
+    }
+    return i;
+}
+
+/* 0x35C30. The first projectile (stat 4) touching i that i did not fire.
+   Anything but an effector takes its damage, speed and heading. */
+short ifhitweapon(short i)
+{
+    short j;
+
+    for (j = headspritestat[4]; j >= 0; j = nextspritestat[j])
+        if (j != i && i != sprite[j].owner
+            && abs(sprite[i].x - sprite[j].x) + abs(sprite[i].y - sprite[j].y) < 768
+            && abs((sprite[i].z - sprite[j].z) >> 8) <= 48)
+            break;
+    if (j < 0)
+        return -1;
+    if (sprite[i].statnum != 3) {
+        sprite[i].extra -= sprite[j].extra;
+        sprite[i].xvel = sprite[j].xvel;
+        sprite[i].ang = sprite[j].ang;
+        if ((sprite[i].statnum == 1 || sprite[i].statnum == 10) && sprite[j].picnum == 389)
+            spawn(i, 1404);
+    }
+    return j;
+}
+
+/* 0x35D50 */
+void guts(short i)
+{
+    spritetype *s = &sprite[i];
+    int z = s->z - 9216;
+
+    EGS(s->sectnum, s->x, s->y, z, 0, 870, -16, 24, 24, s->ang + 1536, 64, -623, i, 5);
+    EGS(s->sectnum, s->x, s->y, z, 0, 870, -16, 24, 24, s->ang - 512, 48, -447, i, 5);
+    EGS(s->sectnum, s->x, s->y, z + 2048, 0, 878, -16, 24, 24, s->ang + 512, 32, -508, i, 5);
+    EGS(s->sectnum, s->x, s->y, z + 2048, 0, 878, -16, 24, 24, s->ang - 512, 24, -768, i, 5);
+    EGS(s->sectnum, s->x, s->y, z, 0, 874, -16, 24, 24, s->ang - 1024, 32, -768, i, 5);
 }

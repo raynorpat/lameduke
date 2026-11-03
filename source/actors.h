@@ -15,5 +15,14 @@ short findplayer(short i, int *dist);
 void addweapon(short p, short weapon, int force);
 void shoot(short i, short atwith, int mode);
 void processinput(short snum);
+void resetplayer(short p);
+
+int getincangle(int a, int na, int shift);
+int ssp(short i, int cliptype);
+void hitradius(short i, int r, int damage);
+void nuke(int x, int y, int z, short i);
+short ifsquished(short i, short p);
+short ifhitweapon(short i);
+void guts(short i);
 
 #endif

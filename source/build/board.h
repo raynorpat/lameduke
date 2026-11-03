@@ -89,6 +89,9 @@ int clipinsideboxline(int x, int y, int x1, int y1, int x2, int y2, int walldist
 /* 0x5225C. Returns the tag of the first thing hit: wall+0x8000, sprite+0xC000, or 0. */
 int clipmove(int *x, int *y, int *z, short *sectnum, int xvect, int yvect,
     int walldist, int ceildist, int flordist, int cliptype);
+int movesprite(short s, int xchange, int ychange, int zchange, int walldist, int ceildist, int flordist,
+    int cliptype, int tics);
+int cansee(int x1, int y1, int z1, short sect1, int x2, int y2, int z2, short sect2);
 /* 0x511C4 */
 void hitscan(int xs, int ys, int zs, short sectnum, int vx, int vy, int vz,
     short *hitsect, short *hitwall, short *hitsprite, int *hitx, int *hity, int *hitz);

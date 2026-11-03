@@ -1093,3 +1093,65 @@ void hitscan(int xs, int ys, int zs, short sectnum, int vx, int vy, int vz,
         }
     }
 }
+
+/* 0x508C9. Moves sprite s by the change times tics; returns what clipmove
+   hit, or sector+0x4000 when the new z leaves the sector. */
+int movesprite(short s, int xchange, int ychange, int zchange, int walldist, int ceildist, int flordist,
+    int cliptype, int tics)
+{
+    spritetype *spr = &sprite[s];
+    short sect = spr->sectnum;
+    int z = spr->z - 2 * tilesizy[spr->picnum] * spr->yrepeat;
+    int retval;
+
+    retval = clipmove(&spr->x, &spr->y, &z, &sect, (xchange * tics) << 11, (ychange * tics) << 11,
+        walldist, ceildist, flordist, cliptype);
+    if (sect != spr->sectnum && sect >= 0)
+        changespritesect(s, sect);
+    z = ((tics * zchange) >> 3) + spr->z;
+    if (sect < 0)
+        return retval; /* the exe reads sector[-1] here */
+    if (z <= sector[sect].ceilingz || z > sector[sect].floorz) {
+        if (retval == 0)
+            return sect + 0x4000;
+    } else {
+        spr->z = z;
+    }
+    return retval;
+}
+
+/* 0x51016. Both sectors start the search list; a wall the line crosses must
+   open onto a sector whose span contains the crossing height. */
+int cansee(int x1, int y1, int z1, short sect1, int x2, int y2, int z2, short sect2)
+{
+    short list[MAXSECTORS];
+    int cnt = 2, k;
+
+    if (x1 == x2 && y1 == y2)
+        return 1;
+    list[0] = sect1;
+    list[1] = sect2;
+    for (k = 0; k < cnt; k++) {
+        short dasect = list[k];
+        int w, end = sector[dasect].wallptr + sector[dasect].wallnum - 1;
+
+        for (w = sector[dasect].wallptr; w <= end; w++) {
+            int ix, iy, iz, j;
+            short ns;
+
+            if (lintersect(x1, y1, z1, x2, y2, z2, wall[w].x, wall[w].y, wall[wall[w].point2].x,
+                    wall[wall[w].point2].y, &ix, &iy, &iz, 0) != 1)
+                continue;
+            ns = wall[w].nextsector;
+            if (ns == -1 || iz <= sector[dasect].ceilingz || iz >= sector[dasect].floorz
+                || iz <= sector[ns].ceilingz || iz >= sector[ns].floorz)
+                return 0;
+            for (j = 0; j < cnt; j++)
+                if (list[j] == ns)
+                    break;
+            if (j == cnt && cnt < MAXSECTORS)
+                list[cnt++] = ns;
+        }
+    }
+    return 1;
+}

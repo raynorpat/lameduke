@@ -1,7 +1,12 @@
 #include "gamedef.h"
+#include "global.h"
+#include "actors.h"
+#include "sounds.h"
+#include "math.h"
 
 #include "platform.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -573,7 +578,7 @@ int compilecon(void)
     puts("    Compiling...");
     memset(actorscrptr, 0, sizeof actorscrptr);
     labelcnt = 0;
-    scriptptr = 0;
+    scriptptr = 1; /* script[0] stays 0 so index 0 means none, as NULL does in the exe */
     warning = 0;
     error = 0;
     total_lines = 0;
@@ -588,6 +593,397 @@ int compilecon(void)
         exit(0);
     total_lines = (short)(total_lines + line_number);
     printf("    Total Lines:%ld.\n", (long)total_lines);
-    printf("    Code Size:%ld bytes.\n", (long)scriptptr * 4);
+    printf("    Code Size:%ld bytes.\n", (long)(scriptptr - 1) * 4);
     return 0;
+}
+
+#define APLAYER 283
+
+static int insptr;                  /* dword_125234, as an index */
+static unsigned char killit;        /* byte_1257BF */
+static short hitweapon = -1;        /* word_131DFA */
+static short canseecache = -1;      /* word_131DF4 */
+
+/* 0x403B0. The heading, out of angs evenly spaced ones, with the longest
+   clear line from sprite i. */
+static short furthestangle(short i, short angs)
+{
+    spritetype *s = &sprite[i];
+    int a = 0, best = 0, greatest = INT_MIN;
+    short hitsect, hitwall, hitspr;
+    int hx, hy, hz;
+
+    do {
+        int d;
+
+        hitscan(s->x, s->y, s->z - 0x800, s->sectnum, sintable()[(a + 512) & 2047], sintable()[a & 2047], 0,
+            &hitsect, &hitwall, &hitspr, &hx, &hy, &hz);
+        d = abs(hx - s->x) + abs(hy - s->y);
+        if (d > greatest) {
+            greatest = d;
+            best = a;
+        }
+        a += 2048 / angs;
+    } while ((short)a < 2048);
+    return (short)best;
+}
+
+static short *strengthof(short i)
+{
+    return sprite[i].picnum == APLAYER ? &ps[sprite[i].yvel].w54 : &sprite[i].extra;
+}
+
+static int parse(short i, short p, int dist);
+
+/* The tail every if shares. slot is the index of the jump slot; the true
+   branch runs the one command after it, the false one jumps and runs a
+   following else. */
+static void doif(short i, short p, int dist, int cond, int slot)
+{
+    if (cond) {
+        insptr = slot + 1;
+        parse(i, p, dist);
+        return;
+    }
+    insptr = script[slot];
+    if (script[insptr] == K_ELSE) {
+        insptr += 2;
+        parse(i, p, dist);
+    }
+}
+
+/* 0x408B0. Runs one command for sprite i with player p at distance dist;
+   1 ends the enclosing block. execute (0x42260) inlines the same switch. */
+static int parse(short i, short p, int dist)
+{
+    spritetype *s = &sprite[i];
+    playertype *pl = &ps[p];
+    int *t = hittype[i];
+    int c = insptr, arg = script[c + 1], k;
+
+    if (killit)
+        return 1;
+    switch (script[c]) {
+    case 2: /* addbatteryammo */
+        pl->w4e += (short)arg;
+        insptr = c + 2;
+        return 0;
+    case 3: /* ifrnd */
+        doif(i, p, dist, (krand() >> 8) >= 255 - arg, c + 2);
+        return 0;
+    case 4: /* enda */
+    case 12: /* break */
+    case 18: /* ends */
+        return 1;
+    case 5: /* ifcansee */
+        if (canseecache == -1) {
+            k = getincangle(s->ang, getangle(pl->posx - s->x, pl->posy - s->y), 0);
+            canseecache = (short)(k <= -128 || k >= 128 ? 0
+                : cansee(s->x, s->y, s->z - (s->yrepeat << 7), s->sectnum, pl->posx, pl->posy,
+                      pl->posz - 4096, pl->cursectnum));
+        }
+        doif(i, p, dist, canseecache != 0, c + 1);
+        return 0;
+    case 6: /* ifhitweapon */
+        hitweapon = ifhitweapon(i);
+        doif(i, p, dist, hitweapon >= 0, c + 1);
+        return 0;
+    case 7: /* action */
+        t[2] = t[3] = 0;
+        t[4] = arg;
+        insptr = c + 2;
+        return 0;
+    case 8: /* ifpdistl */
+        doif(i, p, dist, dist < arg, c + 2);
+        return 0;
+    case 9: /* ifpdistg */
+        doif(i, p, dist, dist > arg, c + 2);
+        return 0;
+    case K_ELSE:
+        insptr = arg;
+        return 0;
+    case 11: /* strength */
+        *strengthof(i) = (short)arg;
+        insptr = c + 2;
+        return 0;
+    case 13: /* shoot */
+        shoot(i, (short)arg, 0);
+        insptr = c + 2;
+        return 0;
+    case 14: /* addscore */
+        pl->f36 += arg;
+        insptr = c + 2;
+        return 0;
+    case K_SOUND:
+        spritesound((short)arg, i);
+        insptr = c + 2;
+        return 0;
+    case 16: /* fall */
+        insptr = c + 1;
+        if (s->z >= sector[s->sectnum].floorz) {
+            s->zvel = 0;
+            s->z = sector[s->sectnum].floorz;
+        } else {
+            if (s->zvel < 2048)
+                s->zvel += 256;
+            s->z += s->zvel;
+        }
+        return 0;
+    case K_STATE:
+        insptr = arg;
+        while (parse(i, p, dist) == 0)
+            ;
+        insptr = c + 2;
+        return 0;
+    case 21: /* nuke */
+        insptr = c + 1;
+        nuke(s->x, s->y, s->z, i);
+        return 0;
+    case 22: /* killit */
+        killit = 1;
+        insptr = c + 1;
+        return 0;
+    case 23: /* addweapon */
+        insptr = c + 2;
+        addweapon(p, (short)arg, 0);
+        return 0;
+    case 24: /* weapon */
+        insptr = c + 2;
+        return 0;
+    case 25: /* addhealth */
+        insptr = c + 2;
+        if (debugmode || pl->b96 == 0)
+            pl->w54 = pl->w54 > 0 ? (short)(pl->w54 + arg) : 0;
+        else
+            pl->b96 -= 4;
+        return 0;
+    case 26: /* ifdead */
+        doif(i, p, dist, (s->picnum == APLAYER ? ps[s->yvel].w54 - 1 : s->extra) < 0, c + 1);
+        return 0;
+    case 27: /* ifsquished */
+        doif(i, p, dist, ifsquished(i, p) >= 0, c + 1);
+        return 0;
+    case 28: /* cactor */
+        s->picnum = (short)arg;
+        insptr = c + 2;
+        return 0;
+    case K_LBRACE:
+        insptr = c + 1;
+        while (parse(i, p, dist) == 0)
+            ;
+        return 0;
+    case K_RBRACE:
+        insptr = c + 1;
+        return 1;
+    case 31: /* spawn */
+        insptr = c + 2;
+        spawn(i, (short)arg);
+        return 0;
+    case K_MOVE:
+        t[0] = 0;
+        t[1] = arg;
+        s->hitag = (short)script[c + 2];
+        insptr = c + 3;
+        if (s->hitag & 4)
+            s->ang = furthestangle(i, 8);
+        return 0;
+    case 33: /* ifwasweapon */
+        doif(i, p, dist, hitweapon >= 0 && sprite[hitweapon].picnum == arg, c + 2);
+        return 0;
+    case 34: /* ifaction */
+        doif(i, p, dist, t[4] == arg, c + 2);
+        return 0;
+    case 35: /* ifactioncount */
+        doif(i, p, dist, t[2] >= arg, c + 2);
+        return 0;
+    case 36: /* resetactioncount */
+        insptr = c + 1;
+        t[2] = 0;
+        return 0;
+    case 37: /* debris */
+        for (k = 0; k < arg; k++) {
+            short zv = (short)(-(krand() & 511) - 512), xv = (short)((krand() & 128) + 64), a = (short)(krand() & 2047);
+
+            EGS(s->sectnum, s->x, s->y, s->z, 0, (short)(krand() % 11 + 235), -8, 32, 32, a, xv, zv, i, 5);
+        }
+        insptr = c + 2;
+        return 0;
+    case 38: /* ifskill */
+        doif(i, p, dist, pl->skill < arg, c + 2);
+        return 0;
+    case 40: /* cstat */
+        s->cstat = (unsigned char)arg;
+        insptr = c + 2;
+        return 0;
+    case 41: /* ifmove */
+        doif(i, p, dist, t[1] == arg, c + 2);
+        return 0;
+    case 42: /* resetplayer */
+        insptr = c + 1;
+        resetplayer(p);
+        return 0;
+    case 43: /* ifonwater */
+        doif(i, p, dist, (sector[s->sectnum].lotag & 0x7FFF) == 1
+                && sector[s->sectnum].floorz - s->z < (s->yrepeat << 7), c + 1);
+        return 0;
+    case 44: /* ifinwater */
+        doif(i, p, dist, (sector[s->sectnum].lotag & 0x7FFF) == 2, c + 1);
+        return 0;
+    case 45: /* ifplayersweapon */
+        doif(i, p, dist, pl->w7e == arg, c + 2);
+        return 0;
+    case 46: /* ifmovecount */
+        doif(i, p, dist, t[0] >= arg, c + 2);
+        return 0;
+    case 47: /* resetmovecount */
+        insptr = c + 1;
+        t[0] = 0;
+        return 0;
+    case 48: /* addinventory */
+        if (arg == 0)
+            pl->b99 = 1;
+        else if (arg == 1)
+            pl->b9a = 1;
+        else if (arg == 2)
+            pl->b97 = 1;
+        else if (arg == 3)
+            pl->b9b = 1;
+        else if (arg == 4)
+            pl->b98 = 1;
+        insptr = c + 2;
+        return 0;
+    case 49: /* addammo */
+        pl->w4c += (short)arg;
+        insptr = c + 2;
+        return 0;
+    case K_HITRADIUS:
+        hitradius(i, arg, script[c + 2]);
+        insptr = c + 3;
+        return 0;
+    case K_IFP: {
+        int vel = syncfvel[p] + syncsvel[p], run = syncbits[p] & 0x20, cond;
+
+        cond = ((arg & 8) && pl->b8f && (syncbits[p] & 2))
+            || ((arg & 0x10) && pl->w5a == 0 && pl->b8f == 0
+                && sector[pl->cursectnum].floorz - pl->posz > 18432)
+            || ((arg & 0x20) && pl->w5a > 348)
+            || ((arg & 1) && (unsigned)vel < 8)
+            || ((arg & 2) && vel >= 8 && !run)
+            || ((arg & 4) && vel >= 8 && run)
+            || ((arg & 0x40) && s->z - 12288 > pl->posz)
+            || ((arg & 0x80) && vel <= -8 && !run)
+            || ((arg & 0x100) && vel <= -8 && run)
+            || ((arg & 0x200) && pl->lookang < -128)
+            || ((arg & 0x400) && pl->lookang > 128);
+        /* 0x800 excludes the three tests after it, as the exe's else-if does. */
+        if (!cond && (arg & 0x800))
+            cond = ((s->ang + 3200 - (cameraspr >= 0 ? sprite[cameraspr].ang : 0)) & 2047) >> 8 < 2;
+        else if (!cond)
+            cond = ((arg & 0x1000) && pl->bab) || ((arg & 0x2000) && pl->b8f) || ((arg & 0x4000) && pl->b94);
+        doif(i, p, dist, cond, c + 2);
+        return 0;
+    }
+    case 52: /* addrammo */
+        pl->w52 += (short)arg;
+        insptr = c + 2;
+        return 0;
+    case 53: /* sink */
+        s->z += 4096;
+        s->xvel >>= 1;
+        insptr = c + 1;
+        return 0;
+    case 56: /* ifstrength */
+        doif(i, p, dist, *strengthof(i) <= arg, c + 2);
+        return 0;
+    case 57: /* blood */
+        for (k = 0; k < arg; k++) {
+            short zv = (short)(-1024 - (krand() & 255)), a = (short)(s->ang + (krand() & 127));
+            int yr = (krand() & 7) + 8, xr = (krand() & 7) + 8;
+
+            EGS(s->sectnum, s->x, s->y, s->z - 0x2000, krand() & 2, 488, -16, xr, yr, a, 0, zv, i, 5);
+        }
+        insptr = c + 2;
+        return 0;
+    case 58: /* guts */
+        insptr = c + 1;
+        guts(i);
+        return 0;
+    case 59: /* ifspawnedby: the exe compares the owner's index with a tile number */
+        doif(i, p, dist, s->owner >= 0 && s->owner == arg, c + 2);
+        return 0;
+    default:
+        snprintf(tempbuf, sizeof tempbuf, "%d", s->picnum);
+        errorexit(tempbuf);
+        return 1;
+    }
+}
+
+/* 0x42260. Steps sprite i's action, runs its actor code, then applies its
+   move and its hitag move flags. */
+void execute(short i, short p, int dist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+    int a = actorscrptr[s->picnum];
+    short h;
+
+    if (!a)
+        return;
+    insptr = a + 4;
+    killit = 0;
+    hitweapon = -1;
+    canseecache = -1;
+    if (t[4]) {
+        const int *act = &script[t[4]];
+
+        s->lotag += synctics;
+        if (s->lotag > act[4]) {
+            t[2]++;
+            s->lotag = 0;
+            t[3] += act[3];
+        }
+        if (abs(t[3]) >= abs(act[3] * act[1]))
+            t[3] = 0;
+    }
+    while (parse(i, p, dist) == 0)
+        ;
+    if (killit) {
+        deletesprite(i);
+        return;
+    }
+    h = s->hitag;
+    if (!t[1] || !h)
+        return;
+    t[0]++;
+    if ((h & 0x200) && s->owner >= 0 && sprite[s->owner].statnum == 1) {
+        s->x = sprite[s->owner].x;
+        s->y = sprite[s->owner].y;
+        s->z = sprite[s->owner].z;
+    }
+    if (h & 1)
+        s->xvel >>= 1;
+    if (h & 2)
+        s->ang = (short)getangle(ps[p].posx - s->x, ps[p].posy - s->y);
+    if (h & 8)
+        s->xvel += (script[t[1]] - s->xvel) >> 1;
+    if (h & 0x10)
+        s->zvel += (16 * script[t[1] + 1] - s->zvel) >> 1;
+    if (h & 0x20) {
+        int fz = sector[s->sectnum].floorz;
+
+        if (s->z + 0x2000 < fz)
+            s->zvel += 16 * (short)script[t[1] + 1];
+        else if (s->z + 0x2000 > fz)
+            s->zvel -= 16 * (short)script[t[1] + 1];
+    }
+    if (h & 0x40)
+        s->z = sector[s->sectnum].ceilingz + 2048;
+    if (h & 0x400)
+        s->z = sector[s->sectnum].floorz - 2048;
+    if (h & 0x80)
+        s->ang += getincangle(s->ang, getangle(ps[p].posx - s->x, ps[p].posy - s->y), 1);
+    if ((s->zvel | s->xvel) && !ssp(i, 1) && (h & 0x100) && (sector[s->sectnum].lotag & 0x7FFF) != 1) {
+        s->ang += 256;
+        ssp(i, 1);
+    }
 }
