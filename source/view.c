@@ -761,10 +761,10 @@ void displayrooms(short p)
     drawmasks();
     reflectfloor();
     /* Level play draws the weapon, the status bar and the quotes. A monitor
-       (w56 >= 0) draws the corners instead. The demo path's 0x1A420, used
-       when that same view is up and gm does not have bit 2, is still to lift. */
+       (w56 >= 0) draws the corners instead: the level frame when gm has bit 2,
+       the demo frame always (0x1A420 is the same draw). */
     if (pl->w56 >= 0) {
-        if (pl->gm & 4)
+        if ((pl->gm & 4) || demomode == 2)
             displaymonitor();
     } else if (cameraspr < 0) {
         displayweapon(p);

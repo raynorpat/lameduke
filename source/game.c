@@ -354,7 +354,9 @@ int main(int argc, char **argv)
             /* 0x1B810 starts a new game from each demo's header. */
             newgame(game_volume, game_level, game_skill);
             enterlevel(2);
+            demomode = 2;
             if (play_demo(&demo)) {
+                demomode = 0;
                 demo_free(&demo);
                 break;
             }
