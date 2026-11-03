@@ -691,6 +691,50 @@ static void reflectfloor(void)
     }
 }
 
+/* 0x21380. Renders a 96x96 view from (x,y,z,ang,sect) into tile pic. The
+   exe copies the window into the tile row by row, draws the tile back with
+   0x56C60 and copies again, which leaves the tile holding the view in its
+   own column order; the copy below does that in one pass. */
+static void rendertile(int x, int y, int z, short a, short sect, short pic)
+{
+    int u, v, pitch = framebuffer_pitch();
+    const unsigned char *src = framebuffer();
+
+    if (!waloff[pic] || tilesizx[pic] != 96 || tilesizy[pic] != 96)
+        return;
+    setview(0, 0, 95, 95);
+    drawrooms(x, y, z, a, 100, sect);
+    animatesprites(a);
+    drawmasks();
+    for (u = 0; u < 96; u++)
+        for (v = 0; v < 96; v++)
+            waloff[pic][u * 96 + v] = src[v * pitch + u];
+    gotpic[pic >> 3] |= (unsigned char)(1 << (pic & 7));
+    viewsize(myconnectindex);
+}
+
+/* 0x25410. Every twelfth frame the viewscreen near the player (1408) shows
+   what its camera, or the player's open monitor, sees. */
+static void updateviewscreen(short p)
+{
+    short vs = viewscreen, o;
+    int *t;
+
+    if (vs == -1)
+        return;
+    t = hittype[vs];
+    if (t[0] < 11) {
+        t[0]++;
+        return;
+    }
+    t[0] = 0;
+    if (ps[p].w56 >= 0)
+        sprite[vs].owner = ps[p].w56;
+    o = sprite[vs].owner;
+    if (o >= 0 && abs(sprite[ps[p].i].x - sprite[vs].x) + abs(sprite[ps[p].i].y - sprite[vs].y) < 2048)
+        rendertile(sprite[o].x, sprite[o].y, sprite[o].z, sprite[o].ang, sprite[o].sectnum, 1408);
+}
+
 /* 0x14050. Draws player p's view, or the demo camera's. */
 void displayrooms(short p)
 {
@@ -700,7 +744,7 @@ void displayrooms(short p)
         return; /* pending: 0x5445E draws the 2D map */
     /* pending: resizing (sync bits 0x80000/0x100000/0x400000) refills the border with tile 1170 */
     animatewalls();
-    /* pending: 0x25410 renders the near viewscreen (1408) into its tile */
+    updateviewscreen(p);
     if (cameraspr >= 0) {
         spritetype *c = &sprite[cameraspr];
 
