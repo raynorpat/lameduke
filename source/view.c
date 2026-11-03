@@ -454,6 +454,50 @@ int minitext(int x, int y, const char *s, int shade)
     }
 }
 
+/* 0x12750. The big font. A digit is the character plus 101, a lowercase
+   letter plus 26 and 2 px lower, an uppercase letter plus 32. Any other
+   character repeats the previous glyph. A space is 5 px, a newline drops
+   16 and returns to the left edge. Nothing is drawn while the local player
+   is in the 2D map. Returns the x the next glyph would use. */
+int gametext(int x, int y, const char *s, int shade)
+{
+    int left = x;
+    const unsigned char *p = (const unsigned char *)s;
+    int pic = -1;
+
+    if (ps[myconnectindex].f02 == 2)
+        return 0;
+    while (*p) {
+        unsigned char c = *p++;
+        int dy = 2;
+
+        if (c == '\n') {
+            x = (short)left;
+            y += 16;
+            continue;
+        }
+        if (c == ' ') {
+            x += 5;
+            continue;
+        }
+        if (c >= '0' && c <= '9')
+            pic = c + 101;
+        if (c >= 'a' && c <= 'z')
+            pic = c + 26;
+        if (c >= 'A' && c <= 'Z') {
+            dy = 0;
+            pic = c + 32;
+        }
+        /* A glyph that is not a letter or a digit, and is not preceded by
+           one, reads an uninitialised tile in the exe. Skip it. */
+        if (pic < 0)
+            continue;
+        rotatesprite(x, y + dy, (short)pic, (signed char)shade, 0, 0);
+        x += tilesizx[pic] + 1;
+    }
+    return x;
+}
+
 /* 0x13800. */
 void numtext(int x, int y, int value, int shade)
 {

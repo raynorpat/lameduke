@@ -11,6 +11,11 @@ void displayrooms(short p);
    the next glyph would use. */
 int minitext(int x, int y, const char *s, int shade);
 
+/* 0x12750. The big font: digits are char+101, lowercase char+26 (2 px
+   lower), uppercase char+32. Other characters repeat the previous glyph.
+   A space is 5 px and a newline drops 16. */
+int gametext(int x, int y, const char *s, int shade);
+
 /* 0x13800. That font, for a base-10 number. */
 void numtext(int x, int y, int value, int shade);
 
