@@ -2898,3 +2898,137 @@ void moveeffectors(void)
         }
     }
 }
+
+/* The water and teleport pairs (stat 9), the first part of 0x18EA0: sprites
+   resting on a lotag 0 sector's floor jump to the partner of the same hitag,
+   and players cross between surface (1), underwater (2) and plain (0)
+   sectors. The partner search keeps the last skipped candidate's sector
+   lotag as the one it tests next, as the exe does. */
+static void moveteleporters(void)
+{
+    short i, j, k, p;
+
+    for (i = headspritestat[9]; i >= 0; i = nextspritestat[i]) {
+        spritetype *s = &sprite[i];
+        short sect = s->sectnum;
+
+        if (s->z > sector[sect].floorz)
+            s->z = sector[sect].floorz;
+        if (sector[sect].lotag == 0 && sector[sect].floorz == s->z)
+            for (j = headspritesect[sect]; j >= 0; j = nextspritesect[j]) {
+                short st = sprite[j].statnum;
+
+                if (hittype[i][1]) {
+                    hittype[i][1]--;
+                    break;
+                }
+                if (st == 3 || st == 9 || sprite[j].picnum == 215 || sprite[j].picnum == 283)
+                    continue;
+                for (k = headspritestat[9]; k >= 0; k = nextspritestat[k])
+                    if (k != i && s->hitag == sprite[k].hitag) {
+                        sprite[j].x = sprite[k].x;
+                        sprite[j].y = sprite[k].y;
+                        sprite[j].z = sprite[k].z;
+                        setsprite(j, sprite[j].x, sprite[j].y, sprite[j].z);
+                        hittype[k][1] = 10;
+                        hittype[i][1] = 10;
+                    }
+            }
+        for (p = connecthead; p >= 0; p = connectpoint2[p]) {
+            playertype *pl = &ps[p];
+            int lt = sector[sect].lotag & 0x7FFF, cl;
+
+            if (sect != pl->cursectnum)
+                continue;
+            if (lt == 0) {
+                if (abs(s->z - pl->posz) > 4096 && s->z != sector[sect].floorz)
+                    continue;
+            } else if (lt == 2) {
+                if (sector[sect].ceilingz + 1280 < pl->posz)
+                    continue;
+            } else if (lt == 1 && sector[sect].floorz - 1280 > pl->posz)
+                continue;
+            if (hittype[i][0]) {
+                hittype[i][0]--;
+                continue;
+            }
+            for (k = headspritestat[9]; k >= 0; k = nextspritestat[k]) {
+                int old;
+
+                if (k == i || s->hitag != sprite[k].hitag)
+                    continue;
+                old = lt;
+                lt = sector[sprite[k].sectnum].lotag;
+                if ((old == 1 && (lt == 0 || lt == 1)) || (old == 2 && lt == 2))
+                    continue;
+                break;
+            }
+            if (k < 0)
+                continue;
+            cl = lt;
+            if (cl == 0) {
+                pl->posx = sprite[k].x;
+                pl->posy = sprite[k].y;
+                pl->posz = sprite[k].z == s->z ? sector[sprite[k].sectnum].floorz - 9216 : sprite[k].z;
+                hittype[k][0] = 20;
+                hittype[i][0] = 20;
+            }
+            if (cl == 1) {
+                if (pl->b8f)
+                    spritesound(28, pl->i);
+                pl->posx += sprite[k].x - s->x;
+                pl->posy += sprite[k].y - s->y;
+                pl->posz = sprite[k].z - 1536;
+                hittype[k][0] = 1;
+                hittype[i][0] = 1;
+            }
+            if (cl == 2) {
+                spritesound(10, pl->i);
+                pl->posx += sprite[k].x - s->x;
+                pl->posy += sprite[k].y - s->y;
+                pl->posz = sector[sprite[k].sectnum].ceilingz + 1536;
+                hittype[k][0] = 1;
+                hittype[i][0] = 1;
+            }
+            pl->cursectnum = sprite[k].sectnum;
+            if (sector[sprite[k].sectnum].lotag & 0x7FFF) {
+                for (j = 0; j < 20; j++)
+                    spawn(pl->i, 215);
+                spawn(pl->i, 1190);
+            }
+        }
+    }
+}
+
+/* 0x18EA0. One game tic of synctics. */
+void domovethings(void)
+{
+    short p;
+
+    randomstash = (short)krand();
+    cameraspr = -1;
+    lockclock += synctics;
+    doanimations(synctics);
+    if (!gamepaused) {
+        /* pending: demomode 1 records player 0's input here (Task 6) */
+        moveeffects();
+        moveteleporters();
+    }
+    for (p = connecthead; p >= 0; p = connectpoint2[p]) {
+        playerkeys(p);
+        if (!gamepaused) {
+            processinput(p);
+            checksectors(p);
+        }
+    }
+    if (!gamepaused) {
+        moveplayers();
+        moveweapons();
+        movestandables();
+        moveeffectors();
+        wakeactors();
+        moveactors();
+        movemusic();
+    }
+    synctics = 0;
+}
