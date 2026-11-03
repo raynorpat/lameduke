@@ -214,6 +214,7 @@ static int play_level(int record)
     demo_t rec;
     int cap = 0;
     uint32_t prev;
+    int clock_remainder = 0;
 
     memset(&rec, 0, sizeof rec);
     rec.volume = (unsigned char)game_volume;
@@ -233,14 +234,16 @@ static int play_level(int record)
         per_irq = setup_byte(2) != 0 ? 6 : 1;
         if (elapsed < 0)
             elapsed = 0;
-        irqs = elapsed * 120 / 1000;
+        prev = now;
+        clock_remainder += elapsed * 120;
+        irqs = clock_remainder / 1000;
         if (irqs < 1) {
             SDL_Delay(1);
             continue;
         }
         if (irqs > 40)
             irqs = 40;
-        prev += (uint32_t)(irqs * 1000 / 120);
+        clock_remainder -= irqs * 1000;
         steps = irqs * per_irq;
         if (steps > 255)
             steps = 255;
