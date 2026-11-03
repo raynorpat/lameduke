@@ -797,11 +797,11 @@ static void kickview(short p, short i)
     ps[p].lookang = (short)(a >= 0 ? 2 * sprite[i].extra : -2 * sprite[i].extra);
 }
 
-/* Projectile i's damage to player p: armor soaks 4 a hit unless /d is on. */
-static void hurtplayer(short p, short i)
+/* Damage to player p: armor soaks 4 a hit unless /d is on. */
+static void hurt(short p, int amount)
 {
     if (debugmode || ps[p].b96 == 0)
-        ps[p].w54 = ps[p].w54 <= 0 ? 0 : (short)(ps[p].w54 - sprite[i].extra);
+        ps[p].w54 = ps[p].w54 <= 0 ? 0 : (short)(ps[p].w54 - amount);
     else
         ps[p].b96 -= 4;
 }
@@ -832,7 +832,7 @@ void moveweapons(void)
             shoot(i, 1230, 1);
             if ((short)dist < 512 && s->owner != ps[p].i) {
                 kickview(p, i);
-                hurtplayer(p, i);
+                hurt(p, sprite[i].extra);
             }
             break;
         case 563:
@@ -841,7 +841,7 @@ void moveweapons(void)
             if (nearplayer(i, p, (short)dist)) {
                 spritesound(13, ps[p].i);
                 kickview(p, i);
-                hurtplayer(p, i);
+                hurt(p, sprite[i].extra);
                 s->extra = -1;
             }
             if (!ssp(i, 1)) {
@@ -852,7 +852,7 @@ void moveweapons(void)
         case 389:
             if (s->extra >= 0) {
                 if (nearplayer(i, p, (short)dist)) {
-                    hurtplayer(p, i);
+                    hurt(p, sprite[i].extra);
                     kickview(p, i);
                     spritesound(13, ps[p].i);
                     s->extra = -1;
@@ -1365,5 +1365,709 @@ void movestandables(void)
             if (s->picnum == 627 || s->picnum == 905 || s->picnum == 974)
                 execute(i, p, d);
         }
+    }
+}
+
+short viewscreen = -1; /* word_12538A: the 1408 the local player last stood near */
+
+/* 0x29540. Arms every countdown activator (51) of this lotag. */
+static void armactivators(short lotag)
+{
+    short i;
+
+    for (i = headspritestat[1]; i >= 0; i = nextspritestat[i])
+        if (sprite[i].picnum == 51 && sprite[i].lotag == lotag && sprite[i].yvel == 0)
+            sprite[i].yvel = 1;
+}
+
+/* The flying drone (1280): t1 counts tics, t2 is its mood (0 wander, 1
+   chase, 2 cling to the player's face). */
+static void movedrone(short i, short p, int dist)
+{
+    static const unsigned char frames[4] = { 0, 1, 0, 3 };
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+    playertype *pl = &ps[p];
+    short turn;
+
+    if (movealong(i, s->zvel, 0))
+        s->ang += 1024;
+    t[1]++;
+    turn = ifhitweapon(i);
+    if (turn >= 0) {
+        if (s->extra < 0) {
+            ps[myconnectindex].f36 += 5000;
+            spawn(i, 1370);
+            deletesprite(i);
+            return;
+        }
+        t[2] = -1;
+        s->ang += 1024;
+    }
+    switch (t[2]) {
+    case -1:
+    case 0:
+        if (t[2] == -1)
+            t[2] = 0;
+        else if ((krand() >> 8) >= 251)
+            t[2] = 1;
+        /* turn keeps the hit's sprite index when the drone homes instead */
+        if ((krand() >> 8) < 247) {
+            turn = (short)(sintable()[(16 * t[1]) & 2047] >> 8);
+            s->ang += turn;
+        } else
+            s->ang += getincangle(s->ang, getangle(pl->posx - s->x, pl->posy - s->y), 2);
+        if (turn >= -32 && turn <= 32) {
+            t[0] = frames[t[1] & 3];
+            if (s->xvel < 112)
+                s->xvel += 8;
+        } else {
+            t[0] = turn >= 0 ? 2 : 4;
+            if (s->xvel > 64)
+                s->xvel -= 8;
+        }
+        break;
+    case 1:
+        if (pl->posz + 768 < s->z)
+            s->z -= 1024;
+        else if (pl->posz - 768 > s->z)
+            s->z += 1024;
+        s->ang += getincangle(s->ang, getangle(pl->posx - s->x, pl->posy - s->y), 3);
+        if (s->xvel >= 144)
+            t[0] = 0;
+        else {
+            t[0] = frames[t[1] & 3];
+            s->xvel += 16;
+        }
+        if (dist < 768) {
+            t[2] = (krand() >> 8) < 247 ? 0 : 2;
+            s->ang += 1024;
+        }
+        break;
+    case 2:
+        s->x = (sintable()[(pl->ang + 512) & 2047] >> 6) + pl->posx;
+        s->y = pl->posy + (sintable()[pl->ang & 2047] >> 6);
+        s->z = pl->posz + 3072;
+        t[0] = frames[t[1] & 3];
+        pl->ang += sintable()[((unsigned short)t[1] << 8) & 2047] >> 12;
+        s->ang = pl->ang + 1024;
+        if ((krand() >> 8) >= 223)
+            t[2] = 0;
+        break;
+    }
+}
+
+/* The flickering light (305..308): t0/t1 hold its size while it is dark. */
+static void movelight(short i, short sect, int dist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+
+    if (dist > 0x2000)
+        return;
+    if (t[3] == 0)
+        t[3] = sector[sect].floorshade;
+    for (;;) {
+        if (t[2]) {
+            t[2]--;
+            sector[sect].floorshade = sector[sect].ceilingshade = 20;
+            return;
+        }
+        if ((s->yrepeat | s->xrepeat) == 0) {
+            s->xrepeat = (unsigned char)t[0];
+            s->yrepeat = (unsigned char)t[1];
+            break;
+        }
+        if (krand() & 8)
+            break;
+        t[0] = s->xrepeat;
+        t[1] = s->yrepeat;
+        t[2] = randomstash & 4;
+        s->xrepeat = s->yrepeat = 0;
+    }
+    s->xrepeat = (unsigned char)((randomstash & 7) + 8);
+    s->picnum++;
+    if (randomstash & 1)
+        s->cstat ^= 2;
+    if (dist < 512)
+        spritesound(24, i);
+    if (s->picnum == 309)
+        s->picnum = 305;
+    sector[sect].floorshade = sector[sect].ceilingshade = (s->picnum & 1) ? 0 : 20;
+}
+
+/* The reactor (620..625). t1 counts its meltdown once it is shot dead;
+   at 23 it is gone and pays 100000. */
+static void movereactor(short i, short sect, int dist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i], k, n;
+
+    s->picnum = (short)(((krand() >> 8) < 63 ? 623 : 620) + (short)t[2]);
+    if (++t[2] == 3)
+        t[2] = 0;
+    if (dist >= 4096) {
+        t[3] = 0;
+        stopsound(26);
+    } else {
+        t[0] += 128;
+        /* pending: the 0x126C0 overlay rotatesprite(246, 18, 611, (sin[t0] >> 11) + 8, 1), lifted with the display */
+        if (t[3] == 0) {
+            spritesound(26, i);
+            t[3] = 1;
+        }
+    }
+    if (t[1]) {
+        n = t[1]++;
+        if (n == 23) {
+            ps[myconnectindex].f36 += 100000;
+            stopsound(26);
+            deletesprite(i);
+            return;
+        }
+        s->ang += 300;
+        s->z -= 6144;
+        shoot(i, 0, 1);
+        s->z += 6144;
+        n = t[1];
+        if (n == 2)
+            for (k = headspritestat[3]; k >= 0; k = nextspritestat[k])
+                if (sprite[k].lotag == 3)
+                    hittype[k][4] = 1;
+        if (n == 2 || n == 4 || n == 7 || n == 10 || n == 15) {
+            EGS(s->sectnum, s->x, s->y, s->z - (krand() & 0x3FFF) + 5120, 2, 174, -127, 96, 48, 0, 0, 0, i, 5);
+            spawn(i, 1370);
+            for (k = 0; k < 16; k += 2) {
+                short zv = (short)-(krand() & 1023);
+
+                EGS(sect, s->x, s->y, s->z + (k << 9), 0, 235, -8, 32, 32, s->ang, (short)(krand() + 128), zv, i, 5);
+            }
+        }
+    }
+    if (t[1] == 0 && ifhitweapon(i) >= 0 && s->extra < 0)
+        t[1] = 1;
+}
+
+/* The ceiling or floor turret (930 floor, 931 ceiling). t3 is its rest
+   height; t0 0 rises toward the player's height, 1 aims and fires, 2 sinks
+   back, 4.. waits. */
+static void moveturret(short i, short p, short sect, int dist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i], k;
+    playertype *pl = &ps[p];
+
+    if (ifhitweapon(i) >= 0) {
+        t[4] = 0;
+        if (s->extra < 0) {
+            pl->f36 += 1000;
+            spawn(i, 1370);
+            /* the exe counts this loop in its distance variable */
+            for (dist = 0; dist < 30; dist += 3) {
+                short zv = (short)(-(krand() & 511) - 512), xv = (short)((krand() & 128) + 64), a = (short)(krand() & 2047);
+
+                EGS(sect, s->x, s->y, s->z, 0, (short)(krand() % 11 + 235), -8, 32, 32, a, xv, zv, i, 5);
+            }
+            pl->baf++;
+            t[0] = 2;
+            s->xrepeat = s->yrepeat = 0;
+        }
+    }
+    if (t[0] == 0) {
+        t[4] = 0;
+        if (s->xrepeat == 0) {
+            deletesprite(i);
+            return;
+        }
+        if (dist < 4096) {
+            if (abs(s->z - pl->posz) >= 2048) {
+                short step = (short)(pl->posz - s->z > 0 ? 2048 : -2048);
+
+                s->z += step;
+                if (s->picnum == 930)
+                    sector[sect].floorz += step;
+                else
+                    sector[sect].ceilingz += step;
+            } else {
+                t[1] = 0;
+                t[0]++;
+            }
+        }
+    }
+    if (t[0] == 1) {
+        s->ang += 2 * getincangle(s->ang, getangle(pl->posx - s->x, pl->posy - s->y), 1);
+        s->ang &= (short)0xFF80;
+        if (++t[1] >= 8) {
+            s->shade = 4;
+            t[1] = 0;
+            if (dist > 1024) {
+                t[0] = 4;
+                goto wait;
+            }
+        } else {
+            t[4] ^= 1;
+            if (t[4]) {
+                s->z -= 0x2000;
+                shoot(i, 389, 0);
+                s->shade = -16;
+                s->z += 0x2000;
+            }
+        }
+    }
+    if (t[0] == 2) {
+        t[4] = 0;
+        if (s->picnum == 930) {
+            s->z += 2048;
+            sector[sect].floorz += 2048;
+            if (sector[sect].floorz > t[3]) {
+                t[0] = 0;
+                return;
+            }
+        } else {
+            s->z -= 2048;
+            sector[sect].ceilingz -= 2048;
+            if (sector[sect].ceilingz < t[3]) {
+                t[0] = 0;
+                return;
+            }
+        }
+    }
+    if (t[0] <= 3)
+        return;
+wait:
+    t[0]++;
+    if (dist > 4096)
+        t[0] = 2;
+    else if (t[0] > 10)
+        t[0] = 1;
+    s->ang = (short)getangle(pl->posx - s->x, pl->posy - s->y);
+}
+
+/* The pipe bomb (721): owner's t0 names the player whose b90 detonates it.
+   Squished by a closing sector, it is a dud; otherwise it slides to rest,
+   can be picked back up, and once detonated burns for 20 tics. */
+static void movebomb(short i, short p, int dist)
+{
+    spritetype *s = &sprite[i];
+    /* shortcut: the exe reads hittype[-1] for an ownerless bomb; ownerless ones use player 0 */
+    short own = (short)(s->owner >= 0 ? hittype[s->owner][0] : 0);
+    int a;
+
+    if (ifsquished(i, p) >= 0 && s->extra < 0)
+        ps[own].b90 = 0;
+    fallto(s);
+    if (s->xvel <= 0)
+        s->xvel = 0;
+    else {
+        s->xvel -= 4;
+        if (s->xvel & 8)
+            s->cstat ^= 4;
+    }
+    movealong(i, s->zvel, 0);
+    if (ps[own].b90 || ps[own].i != s->owner) {
+        if (dist > 512 && dist < 768) {
+            ps[p].w50++;
+            addweapon(p, 721, 1);
+            deletesprite(i);
+        }
+        return;
+    }
+    s->yvel++;
+    if (s->xrepeat || s->yrepeat) {
+        s->xrepeat = s->yrepeat = 0;
+        hitradius(i, 3092, s->extra);
+    }
+    if (s->yvel & 1)
+        for (a = 0; a < 2047; a += 256)
+            EGS(s->sectnum, s->x, s->y, s->z - (s->yvel << 10), 0, 1370, -127, 48, 48, (short)a, 0, 0, i, 5);
+    if (s->yvel > 20)
+        deletesprite(i);
+}
+
+/* The bug (263): hops at the player and nips; shot dead it becomes 273. */
+static void movebug(short i, short p, int dist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+    playertype *pl = &ps[p];
+
+    if (dist > 4096)
+        return;
+    if (ifhitweapon(i) >= 0 && s->extra < 0) {
+        s->picnum = 273;
+        t[0] = 0;
+        s->cstat &= ~1;
+        return;
+    }
+    switch (t[0]) {
+    case 0:
+        if (dist < 4096)
+            t[0]++;
+        break;
+    case 1:
+        t[0]++;
+        s->ang = (short)getangle(pl->posx - s->x, pl->posy - s->y);
+        if (dist != 0)
+            s->zvel = (short)(((pl->posz + 2048 - s->z) << 8) / dist);
+        s->xvel = 16;
+        break;
+    case 2:
+        if (s->zvel > -1024)
+            s->zvel -= 64;
+        s->z += s->zvel;
+        if (s->xvel < 256)
+            s->xvel += 16;
+        if (movealong(i, s->zvel, 0))
+            t[0]++;
+        if (dist < 768) {
+            s->ang += 1024 - (randomstash & 2047);
+            hurt(p, 1);
+        }
+        break;
+    case 3:
+        if (movealong(i, s->zvel, 0)) {
+            s->ang += 512;
+            t[0] = 1;
+        }
+        break;
+    }
+}
+
+/* The face-hugging parasite (961..968). t0: 0 crawl, 1 leap to the
+   ceiling, 2 drop, 3 fall, -1 burst, -2 feed on a body, -3 shrivel, -4
+   on the player's face, where t3 steps the bite frames. */
+static void moveparasite(short i, short p, short sect, int dist)
+{
+    static const short bite[8] = { 5, 5, 6, 6, 7, 7, 6, 5 };
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+    playertype *pl = &ps[p];
+    short j, xv;
+
+    t[1] += 128;
+    if (t[0] == -4) {
+        setsprite(i, s->x, s->y, s->z);
+        s->cstat &= ~8;
+        s->ang = pl->ang;
+        if (syncbits[p] & 4) {
+            pl->w7c = 0;
+            s->xvel = 128;
+            s->zvel = (short)(16 * (100 - pl->horiz) - 512);
+            t[0] = 0;
+            pl->w80 = -1;
+        }
+        s->z = pl->posz - t[2] + 2048;
+        s->z += 16 * (100 - pl->horiz);
+        if (t[2] > 512)
+            t[2] -= 128;
+        if (t[2] < 348)
+            t[2] += 128;
+        if (t[3] <= 0) {
+            s->picnum = 966;
+            if ((krand() >> 8) >= 223)
+                t[3] = 1;
+        } else {
+            s->picnum = bite[t[3]] + 961;
+            if (t[3] == 4) {
+                hurt(p, 5);
+                spritesound(13, pl->i);
+            }
+            t[3] = t[3] >= 7 ? 0 : t[3] + 1;
+        }
+        s->xrepeat = (unsigned char)((sintable()[t[1] & 2047] >> 13) + 20);
+        s->yrepeat = (unsigned char)((sintable()[t[1] & 2047] >> 13) + 15);
+        s->x = pl->posx + (sintable()[(pl->ang + 512) & 2047] >> 7);
+        s->y = (sintable()[pl->ang & 2047] >> 7) + pl->posy;
+        return;
+    }
+    if (s->xvel < 64 && dist < 512 && pl->w80 == -1) {
+        pl->w80 = i;
+        t[2] = (t[0] == 3 || t[0] == 2) ? 3072 : -3328;
+        t[0] = -4;
+    } else if (t[0] == -3) {
+        if (s->xrepeat > 4)
+            s->xrepeat -= 4;
+        if (s->yrepeat > 4)
+            s->yrepeat -= 4;
+        else
+            deletesprite(i);
+        return;
+    }
+    j = ifhitweapon(i);
+    if (j >= 0) {
+        pl->f36 += 1000;
+        if (sprite[j].picnum == 389) {
+            t[0] = -3;
+            return;
+        }
+        if ((krand() >> 8) >= 251 && abs(sector[sect].floorz - sector[sect].ceilingz) < 49152
+            && (t[0] == 0 || t[0] == 2))
+            t[0]++;
+    }
+    if (t[0] == -1) {
+        fallto(s);
+        s->picnum = 965;
+        s->cstat &= 0xF7;
+        if (s->yrepeat > 62)
+            guts(i);
+        if (s->xrepeat > 32)
+            s->xrepeat -= krand() & 7;
+        if (s->yrepeat <= 16) {
+            s->xrepeat = 40;
+            s->yrepeat = 16;
+            s->owner = -1;
+            t[0] = 0;
+        } else
+            s->yrepeat -= krand() & 7;
+        return;
+    }
+    if (t[0] == -2) {
+        spritetype *o;
+
+        fallto(s);
+        o = &sprite[s->owner];
+        o->xvel = 0;
+        s->z = o->z;
+        s->x = (sintable()[(o->ang + 512) & 2047] >> 11) + o->x;
+        s->y = (sintable()[o->ang & 2047] >> 11) + o->y;
+        s->picnum = (short)((randomstash & 1) + 963);
+        if (s->yrepeat < 64)
+            s->yrepeat += 2;
+        else if (s->xrepeat < 32)
+            s->xrepeat += 4;
+        else {
+            t[0] = -1;
+            if (abs(s->x - o->x) + abs(s->y - o->y) < 768)
+                deletesprite(s->owner);
+        }
+        return;
+    }
+    if ((krand() >> 8) >= 223)
+        for (j = headspritesect[sect]; j >= 0; j = nextspritesect[j]) {
+            short pic = sprite[j].picnum;
+
+            if (pic != 408 && pic != 490 && pic != 1536 && pic != 1680 && pic != 1820)
+                continue;
+            if (abs(s->x - sprite[j].x) + abs(s->y - sprite[j].y) < 768 && abs(s->z - sprite[j].z) < 0x2000) {
+                s->owner = j;
+                t[0] = -2;
+                t[1] = 0;
+                return;
+            }
+        }
+    if (t[0] == 0 || t[0] == 2) {
+        s->picnum = 961;
+        if (t[0] == 2) {
+            s->zvel = 0;
+            s->cstat &= ~8;
+            if (sector[sect].ceilingz + 6144 < s->z) {
+                s->z += 2048;
+                t[0]++;
+                return;
+            }
+        } else {
+            s->cstat |= 8;
+            fallto(s);
+        }
+        movealong(i, s->zvel, 0);
+        xv = s->xvel;
+        if (xv > 96) {
+            s->xvel = xv - 2;
+            return;
+        }
+        s->xvel = (short)(64 - (sintable()[((unsigned short)t[1] + 512) & 2047] >> 9));
+        s->ang += getincangle(s->ang, getangle(pl->posx - s->x, pl->posy - s->y), 3);
+        s->xrepeat = (unsigned char)((sintable()[((unsigned short)t[1] + 512) & 2047] >> 11) + 36);
+        s->yrepeat = (unsigned char)((sintable()[t[1] & 2047] >> 13) + 16);
+        if ((krand() >> 8) >= 251 && abs(sector[sect].floorz - sector[sect].ceilingz) < 49152) {
+            s->zvel = 0;
+            t[0]++;
+        }
+    }
+    if (t[0] == 1) {
+        s->picnum = 961;
+        if (s->yrepeat < 40)
+            s->yrepeat += 8;
+        if (s->xrepeat > 8)
+            s->xrepeat -= 4;
+        if (s->zvel > -3072)
+            s->zvel -= 348;
+        s->z += s->zvel;
+        if (sector[sect].ceilingz + 4096 > s->z) {
+            s->z = sector[sect].ceilingz + 4096;
+            s->xvel = 0;
+            t[0]++;
+        }
+    }
+    if (t[0] == 3) {
+        s->picnum = 962;
+        if (s->zvel < 3072)
+            s->zvel += 348;
+        s->z += s->zvel;
+        if (sector[sect].floorz - 0x2000 >= s->z) {
+            if (s->yrepeat < 36)
+                s->yrepeat += 8;
+            if (s->xrepeat > 8)
+                s->xrepeat -= 4;
+        } else {
+            s->yrepeat -= 4;
+            s->xrepeat += 2;
+        }
+        if (sector[sect].floorz - 2048 < s->z) {
+            s->z = sector[sect].floorz - 2048;
+            t[0] = 0;
+            s->xvel = 0;
+        }
+    }
+}
+
+/* 0x35F10. Actors (stat 1): the hard-coded ones here, the rest through
+   their CON code. */
+void moveactors(void)
+{
+    short i, nexti, j;
+
+    for (i = headspritestat[1]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        int *t = hittype[i], dist, d;
+        short p, sect = s->sectnum;
+
+        nexti = nextspritestat[i];
+        p = findplayer(i, &dist);
+        switch (s->picnum) {
+        case 1408:
+            if (dist < 2048)
+                viewscreen = i;
+            continue;
+        case 51:
+            /* A countdown activator: armed by lotag, it fires when hitag runs out. */
+            if (s->yvel != 1 || --s->hitag > 0)
+                continue;
+            operatesectors(sect, i);
+            for (j = headspritesect[sect]; j >= 0; j = nextspritesect[j]) {
+                if (sprite[j].statnum == 6 && sprite[j].picnum == 57)
+                    sprite[j].shade = -31;
+                if (sprite[j].statnum != 3)
+                    continue;
+                if (sprite[j].lotag == 2 || sprite[j].lotag == 21)
+                    hittype[j][0] = 1;
+                else if (sprite[j].lotag == 3)
+                    hittype[j][4] = 1;
+                else if (sprite[j].lotag == 23)
+                    s->shade = 1;
+            }
+            deletesprite(i);
+            continue;
+        case 1280:
+            movedrone(i, p, dist);
+            continue;
+        case 1122:
+            if (++t[0] > 1024 || dist > 0x2000) {
+                deletesprite(i);
+                continue;
+            }
+            d = abs(sector[sect].ceilingz - sector[sect].floorz);
+            s->yrepeat = (unsigned char)(d >> 9);
+            s->xrepeat = (unsigned char)(25 - ((short)(d >> 9) >> 1));
+            s->z = sector[sect].floorz;
+            continue;
+        }
+        if (s->picnum >= 961 && s->picnum <= 968)
+            moveparasite(i, p, sect, dist);
+        else if (s->picnum == 960) {
+            /* A drip: grows on the ceiling, falls, splashes. */
+            if (dist > 0x2000)
+                continue;
+            if (t[0] == 0) {
+                if (t[1] > 0)
+                    t[1]--;
+                else {
+                    s->yrepeat++;
+                    s->xrepeat -= 2;
+                    if (s->yrepeat > 8) {
+                        t[0] = 1;
+                        s->xrepeat = 8;
+                    }
+                }
+            }
+            if (t[0] == 1) {
+                fallto(s);
+                if (sector[sect].floorz - 2048 < s->z) {
+                    t[0] = 2;
+                    spritesound(17, i);
+                }
+            }
+            if (t[0] == 2) {
+                s->xrepeat += 8;
+                s->yrepeat -= 2;
+                if (s->yrepeat < 2) {
+                    s->z = sector[sect].ceilingz + 512;
+                    t[0] = 0;
+                    t[1] = krand() & 31;
+                    s->xrepeat = 16;
+                    s->yrepeat = 0;
+                }
+            }
+        } else if (s->picnum == 930 || s->picnum == 931)
+            moveturret(i, p, sect, dist);
+        else if (s->picnum == 721)
+            movebomb(i, p, dist);
+        else if (s->picnum == 1123) {
+            if (dist <= 0x2000) {
+                d = abs(sector[sect].ceilingz - sector[sect].floorz);
+                s->xrepeat = 16;
+                s->yrepeat = (unsigned char)((d >> 9) + 8);
+                s->z = sector[sect].floorz;
+            }
+        } else if (s->picnum == 32) {
+            /* A proximity trigger: lotag+hitag<<16 >> 13 is its range, or with no
+               hitag, a player standing in its sector. */
+            int range = (s->lotag + (s->hitag << 16)) >> 13, near;
+
+            if (range != 0 && s->hitag != 0)
+                near = dist < range && abs(s->z - ps[p].posz) < 12288;
+            else {
+                short q = playerinsect(sect);
+
+                near = q >= 0 && ps[q].b8f;
+            }
+            if (!near)
+                t[0] = 0;
+            else if (t[0] == 0) {
+                t[0] = 1;
+                armactivators(s->lotag);
+                activatebylotag(s->lotag);
+            }
+        } else if (s->picnum >= 305 && s->picnum <= 308)
+            movelight(i, sect, dist);
+        else if (s->picnum >= 620 && s->picnum <= 625)
+            movereactor(i, sect, dist);
+        else if (s->picnum == 265) {
+            s->owner += 8;
+            if (s->owner < 128)
+                s->ang += 8;
+            else if (s->owner < 384)
+                s->ang -= 8;
+            else if (s->owner < 512)
+                s->ang += 8;
+            else {
+                s->owner = 8;
+                s->ang += 16;
+            }
+        } else if (s->picnum == 263)
+            movebug(i, p, dist);
+        else if (s->picnum == 273) {
+            if (dist > 4096)
+                continue;
+            fallto(s);
+            if (++t[0] > 1024)
+                deletesprite(i);
+            else if (movealong(i, s->zvel, 0)) {
+                s->z = sector[sect].floorz;
+                if (sector[sect].lotag == 1)
+                    deletesprite(i);
+            }
+        } else
+            execute(i, p, dist);
     }
 }

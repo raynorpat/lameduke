@@ -16,6 +16,7 @@ extern animwalltype animwall[MAXANIMWALLS];
 extern short numanimwalls;
 
 void doanimations(int tics);
+void activatebylotag(short lotag);
 int setanimate(short sect, int *ptr, int goal, int vel);
 void operatesectors(short sn, short ii);
 void checkhitswitch(short w);

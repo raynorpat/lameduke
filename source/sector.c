@@ -377,8 +377,9 @@ void operatesectors(short sn, short ii)
     }
 }
 
-/* The activators and masters that switches 395/396 and 405/406 drive. */
-static void activatebytag(short lotag)
+/* 0x28210, which 0x2B4B0 inlines: every activator (stat 8) of this lotag
+   operates its sector; a 23 toggles the sector's 0x4000 bit instead. */
+void activatebylotag(short lotag)
 {
     short i;
 
@@ -417,7 +418,7 @@ void checkhitswitch(short w)
 
         quote(4);
         soundxyz(25, -1, wall[w].x, wall[w].y, 0);
-        activatebytag(lotag);
+        activatebylotag(lotag);
         for (i = headspritestat[1]; i >= 0; i = nextspritestat[i])
             if (sprite[i].picnum == 51 && lotag == sprite[i].lotag && sprite[i].yvel == 0)
                 sprite[i].yvel = 1;
@@ -431,7 +432,7 @@ void checkhitswitch(short w)
             if (sprite[i].lotag == 12 && sprite[i].hitag == wall[w].lotag)
                 hittype[i][0] = wall[w].picnum - 395 == 10 ? 2 : 1;
         soundxyz(25, -1, wall[w].x, wall[w].y, 0);
-        activatebytag(lotag);
+        activatebylotag(lotag);
         for (k = 0; k < numanimwalls; k++) {
             short aw = animwall[k].wallnum;
 

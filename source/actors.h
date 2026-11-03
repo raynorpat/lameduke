@@ -31,6 +31,8 @@ void moveweapons(void);
 void movemusic(void);
 void moveeffects(void);
 void movestandables(void);
+void moveactors(void);
+extern short viewscreen;
 
 extern short randomstash; /* word_1253A0: a krand drawn at the start of every tic */
 
