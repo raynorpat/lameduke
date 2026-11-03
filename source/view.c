@@ -596,6 +596,57 @@ static void displaymonitor(void)
         overlaypal(18, 20, 279, shade, 2);
 }
 
+/* 0x14C21. After the masks, a drawn tile 572 reflects the view into the
+   transparent pixels from row 99 down. Each clear pixel takes the pixel
+   above the run, keeps its low 5 bits, and darkens it; past 64 pixels, or
+   outside shades 96..128, the pixel is 96. The run carries into the next
+   column, as the counter does in the exe. */
+static void reflectfloor(void)
+{
+    unsigned char *fb;
+    int col, run, src, pitch;
+
+    if (!GOTPIC(572) || !waloff[572])
+        return;
+    /* The loop is the 320-wide frame. Setup mode 7 is 640 and is not mirrored. */
+    pitch = framebuffer_pitch();
+    if (pitch != 320)
+        return;
+    fb = (unsigned char *)framebuffer();
+    run = 0;
+    src = 0;
+    for (col = 0; col < 320; col++) {
+        int p = col + 99 * pitch;
+        int row;
+
+        for (row = 99; row < 200; row++) {
+            if (fb[p] == 255) {
+                int v;
+
+                if (run == 0) {
+                    run = 1;
+                    src = p - pitch;
+                }
+                /* A run that starts at row 99 walks off the top of the frame.
+                   The exe reads whatever precedes the buffer; those pixels are 96. */
+                if (src < 0)
+                    v = 96;
+                else {
+                    v = (fb[src] & 31) + 96 - (run >> 1);
+                    if (run > 63 || (unsigned char)v < 96 || (unsigned char)v > 128)
+                        v = 96;
+                    src -= pitch;
+                }
+                run++;
+                fb[p] = (unsigned char)v;
+            } else {
+                run = 0;
+            }
+            p += pitch;
+        }
+    }
+}
+
 /* 0x14050. Draws player p's view, or the demo camera's. */
 void displayrooms(short p)
 {
@@ -620,7 +671,7 @@ void displayrooms(short p)
         animatesprites(pl->ang + pl->lookang);
     }
     drawmasks();
-    /* pending: the tile 572 floor reflection over rows 99..199 */
+    reflectfloor();
     /* Level play draws the weapon, the status bar and the quotes. A monitor
        (w56 >= 0) draws the corners instead. The demo path's 0x1A420, used
        when that same view is up and gm does not have bit 2, is still to lift. */
