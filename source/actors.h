@@ -25,4 +25,9 @@ short ifsquished(short i, short p);
 short ifhitweapon(short i);
 void guts(short i);
 
+void wakeactors(void);
+void moveplayers(void);
+void moveweapons(void);
+void movemusic(void);
+
 #endif

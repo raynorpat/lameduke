@@ -4,6 +4,10 @@
 #include "global.h"
 #include "gamedef.h"
 #include "sector.h"
+#include "sounds.h"
+#include "game.h"
+#include "draw.h"
+#include "music.h"
 
 #include "board.h"
 #include "math.h"
@@ -665,4 +669,281 @@ void guts(short i)
     EGS(s->sectnum, s->x, s->y, z + 2048, 0, 878, -16, 24, 24, s->ang + 512, 32, -508, i, 5);
     EGS(s->sectnum, s->x, s->y, z + 2048, 0, 878, -16, 24, 24, s->ang - 512, 24, -768, i, 5);
     EGS(s->sectnum, s->x, s->y, z, 0, 874, -16, 24, 24, s->ang - 1024, 32, -768, i, 5);
+}
+
+/* 0x358C0. A sleeping actor (stat 2) that can see its nearest player wakes
+   up (stat 1), with its sight quote and sound. */
+void wakeactors(void)
+{
+    short i, nexti;
+    int dist;
+
+    for (i = headspritestat[2]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        short p;
+
+        nexti = nextspritestat[i];
+        p = findplayer(i, &dist);
+        if (!cansee(s->x, s->y, s->z - (s->yrepeat << 7), s->sectnum, ps[p].posx, ps[p].posy,
+                ps[p].posz - 4096, ps[p].cursectnum))
+            continue;
+        switch (s->picnum) {
+        case 60:
+            quote(6);
+            break;
+        case 408:
+            spritesound(21, i);
+            quote(0);
+            break;
+        case 490:
+        case 1680:
+            spritesound(20, i);
+            quote(0);
+            break;
+        case 38:
+        case 1125:
+            quote(1);
+            break;
+        case 579:
+        case 1536:
+            spritesound(22, i);
+            quote(3);
+            break;
+        case 620:
+            quote(2);
+            break;
+        }
+        changespritestat(i, 1);
+    }
+}
+
+/* 0x3A470. Player sprites (stat 10). A live one follows its player, or the
+   player's last spot (and parallax goes to 2) while w56 is set; an ownerless
+   one is a falling, flickering copy that drifts for 8 tics, then stays. */
+void moveplayers(void)
+{
+    short i, nexti;
+
+    for (i = headspritestat[10]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        playertype *p = &ps[s->yvel];
+
+        nexti = nextspritestat[i];
+        if (s->owner >= 0) {
+            if (p->w56 < 0) {
+                execute(i, s->yvel, 0);
+                p = &ps[s->yvel];
+                p->bab = 0;
+                s->x = p->posx;
+                s->y = p->posy;
+                s->z = p->posz + 9216;
+                s->ang = p->ang;
+            } else {
+                parallaxtype = 2;
+                s->x = p->f1a;
+                s->y = p->f1e;
+                s->z = p->f22 + 9216;
+                s->ang = p->f42;
+            }
+            setsprite(i, s->x, s->y, s->z);
+            continue;
+        }
+        if (p->w58 == 0) {
+            deletesprite(i);
+            continue;
+        }
+        if (s->z >= sector[s->sectnum].floorz) {
+            s->zvel = 0;
+            s->z = sector[s->sectnum].floorz;
+        } else {
+            if (s->zvel < 2048)
+                s->zvel += 256;
+            s->z += s->zvel;
+        }
+        if ((krand() >> 8) < 239) {
+            s->shade = 4;
+            s->cstat &= 0xFD;
+        } else {
+            s->shade = 0;
+            s->cstat |= 2;
+        }
+        if (s->yvel >= 8) {
+            s->ang = 2047 - ps[s->yvel].ang;
+            setsprite(i, s->x, s->y, s->z);
+            continue;
+        }
+        s->ang = ps[s->yvel].ang;
+        s->yvel++;
+        s->xvel = 128;
+        movesprite(i, (s->xvel * sintable()[(s->ang + 512) & 2047]) >> 14,
+            (s->xvel * sintable()[s->ang & 2047]) >> 14, s->zvel, 128, 1024, 1024, 0, synctics);
+    }
+}
+
+/* 0x2F2E0. A hit strong enough to matter tips player p's view toward or
+   away from projectile i and kicks the look angle sideways. */
+static void kickview(short p, short i)
+{
+    int a;
+
+    if (sprite[ps[p].i].extra / 20 < ps[p].w54)
+        return;
+    a = getincangle(sprite[i].ang, getangle(sprite[i].x - ps[p].posx, sprite[i].y - ps[p].posy), 0);
+    if (a >= -512 && a < 512)
+        ps[p].horiz += 4;
+    else
+        ps[p].horiz -= 4;
+    ps[p].lookang = (short)(a >= 0 ? 2 * sprite[i].extra : -2 * sprite[i].extra);
+}
+
+/* Projectile i's damage to player p: armor soaks 4 a hit unless /d is on. */
+static void hurtplayer(short p, short i)
+{
+    if (debugmode || ps[p].b96 == 0)
+        ps[p].w54 = ps[p].w54 <= 0 ? 0 : (short)(ps[p].w54 - sprite[i].extra);
+    else
+        ps[p].b96 -= 4;
+}
+
+static int nearplayer(short i, short p, int dist)
+{
+    return dist < 768 && sprite[i].owner != ps[p].i && abs((ps[p].posz - sprite[i].z) >> 8) <= 48;
+}
+
+/* 0x38F30. Projectiles (stat 4). */
+void moveweapons(void)
+{
+    short i, nexti;
+
+    for (i = headspritestat[4]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        int dist;
+        short p;
+
+        nexti = nextspritestat[i];
+        p = findplayer(i, &dist);
+        switch (s->picnum) {
+        case 46:
+            if (s->shade != -15) {
+                s->shade = -15;
+                break;
+            }
+            shoot(i, 1230, 1);
+            if ((short)dist < 512 && s->owner != ps[p].i) {
+                kickview(p, i);
+                hurtplayer(p, i);
+            }
+            break;
+        case 563:
+            if (s->extra < 0)
+                break;
+            if (nearplayer(i, p, (short)dist)) {
+                spritesound(13, ps[p].i);
+                kickview(p, i);
+                hurtplayer(p, i);
+                s->extra = -1;
+            }
+            if (!ssp(i, 1)) {
+                shoot(i, 563, 1);
+                s->extra = -1;
+            }
+            break;
+        case 389:
+            if (s->extra >= 0) {
+                if (nearplayer(i, p, (short)dist)) {
+                    hurtplayer(p, i);
+                    kickview(p, i);
+                    spritesound(13, ps[p].i);
+                    s->extra = -1;
+                    continue;
+                }
+                if (!ssp(i, 1)) {
+                    shoot(i, 389, 1);
+                    s->extra = -1;
+                }
+            }
+            break;
+        case 191:
+        case 1210:
+            if ((short)dist < 512)
+                kickview(p, i);
+            if (s->shade != -15) {
+                s->shade = -15;
+                break;
+            }
+            shoot(i, s->picnum, 1);
+            if (s->picnum == 1210 && s->yvel >= 0)
+                spritesound(30, i);
+            break;
+        case 940:
+        case 1406:
+            break;
+        default:
+            continue;
+        }
+        execute(i, p, (short)dist);
+    }
+}
+
+/* 0x3A860. Music and ambience sprites (stat 11). Below lotag 1000 a sprite
+   cycles t0 through: start the level's (or its lotag's) song, wait until
+   the local player comes within hitag, fade out, wait until the player
+   leaves; at 1000 and up it loops sound lotag-1000 while the player is near. */
+void movemusic(void)
+{
+    spritetype *me = &sprite[ps[myconnectindex].i];
+    short i;
+
+    for (i = headspritestat[11]; i >= 0; i = nextspritestat[i]) {
+        spritetype *s = &sprite[i];
+        int *t = hittype[i], d = (abs(me->x - s->x) + abs(me->y - s->y)) >> 3;
+
+        if (s->lotag > 999) {
+            if (d >= s->hitag) {
+                if (t[0]) {
+                    stopsound(s->lotag - 1000);
+                    t[0] = 0;
+                }
+            } else if (t[0] == 0) {
+                spritesound(s->lotag - 1000, i);
+                t[0] = 1;
+            }
+            continue;
+        }
+        if (t[1] > 0) {
+            t[1] -= 12;
+            if (t[1] < 0) {
+                if (++t[0] > 3)
+                    t[0] = 0;
+                t[1] = 0;
+            }
+            MUSIC_SetVolume(t[1]);
+            continue;
+        }
+        switch (t[0]) {
+        case 0:
+        case 2: {
+            playertype *p = &ps[myconnectindex];
+            /* exe: 0x125308 + 13*lotag, or 0x8AC70 + 130*volume + 13*level, which
+               is the next volume's row; ps.musicptr keeps the offset into musicfn. */
+            int off = t[0] ? 13 * s->lotag : 130 * (p->volume + 1) + 13 * p->level;
+
+            t[0]++;
+            if (off != p->musicptr && off >= 0 && off < (int)sizeof musicfn) {
+                p->musicptr = off;
+                playmusic(&musicfn[0][0][0] + off);
+                MUSIC_SetVolume(music_volume);
+            }
+            break;
+        }
+        case 1:
+            if (d < s->hitag)
+                t[1] = music_volume;
+            break;
+        case 3:
+            if (d >= s->hitag)
+                t[1] = music_volume;
+            break;
+        }
+    }
 }

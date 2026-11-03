@@ -36,3 +36,9 @@ void soundxyz(int num, short i, int x, int y, int z)
     (void)y;
     (void)z;
 }
+
+/* 0x3BC40 */
+void playmusic(const char *fn)
+{
+    (void)fn;
+}

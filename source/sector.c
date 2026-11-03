@@ -600,3 +600,50 @@ void checkhitwall(short w, int x, int y, int z, short atwith)
         soundxyz(23, -1, wall[w].x, wall[w].y, sector[wall[w].nextsector].floorz);
     }
 }
+
+/* 0x250A0. Steps every animation toward its goal by vel per tic, carrying
+   standing players in the sector along; a finished entry is replaced by the
+   last one. */
+void doanimations(int tics)
+{
+    int j;
+    short p;
+
+    for (j = animatecnt - 1; j >= 0; j--) {
+        int a = *animateptr[j], goal = animategoal[j], v = tics * animatevel[j];
+        short dasect = animatesect[j];
+
+        if (a < goal) {
+            a += v;
+            for (p = connecthead; p >= 0; p = connectpoint2[p])
+                if (ps[p].cursectnum == dasect && ps[p].b8f)
+                    ps[p].posz += v;
+            if (a > goal) {
+                stopsound(36);
+                soundxyz(35, -1, wall[sector[dasect].wallptr].x, wall[sector[dasect].wallptr].y,
+                    sector[dasect].floorz);
+                a = goal;
+            }
+        }
+        if (a > goal) {
+            a -= v;
+            for (p = connecthead; p >= 0; p = connectpoint2[p])
+                if (ps[p].cursectnum == dasect && ps[p].b8f)
+                    ps[p].posz -= v;
+            if (a < goal) {
+                stopsound(36);
+                soundxyz(35, -1, wall[sector[dasect].wallptr].x, wall[sector[dasect].wallptr].y,
+                    sector[dasect].floorz);
+                a = goal;
+            }
+        }
+        *animateptr[j] = a;
+        if (a == goal) {
+            animatecnt--;
+            animateptr[j] = animateptr[animatecnt];
+            animatevel[j] = animatevel[animatecnt];
+            animategoal[j] = animategoal[animatecnt];
+            animatesect[j] = animatesect[animatecnt];
+        }
+    }
+}

@@ -4,6 +4,8 @@
 /* The DOS column drawers sit just before the audio library. This view
    uses the same sector, wall and sprite records they walk. */
 
+extern int parallaxtype; /* byte_23DE9D */
+
 void draw_init(void);
 void draw_view(void);
 const unsigned char *framebuffer(void);
