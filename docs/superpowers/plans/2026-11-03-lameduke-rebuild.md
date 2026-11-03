@@ -127,6 +127,8 @@ The unchecked steps below retain the original verification detail; completion wa
 **Interfaces:**
 - Consumes: `game_tic` from Task 5. Esc opens the menu from Task 9 (until Task 9 lands, Esc leaves the loop as it does now).
 
+**Progress:** Commits `33bd272` and `4345aa6` correct demo pacing and reset the player before each recording. All eight shipped demos completed a fast playback cycle without crashing. In demo 4, samples 1423–1425 contain F3, which opens Restore in the original; the port's menu is deferred to Task 9. For an isolated comparison, a disposable copy suppressed that F3 input and inserted a pause after a chosen sample. The views were close at sample 100, while a later comparison around sample 500 showed a substantially different view. The fixture changes the recording and is a diagnostic, not proof that the unmodified demo matches. Continue tracing the divergence and compare the other demos before completing this task.
+
 - [ ] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
 - [ ] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").
 - [ ] **Step 3: Verify.** Watch all eight demos beside DOSBox. The player follows the same route and shoots the same things, and none desyncs (no walking into walls, no early end). Save `LAMEDUKE_TRACE=1` output for demo 1 as `ref/demo1.trace`.
