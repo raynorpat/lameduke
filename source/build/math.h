@@ -17,6 +17,7 @@ extern int sqrttable[2048];
 void initmath(void);
 int tablesqrt(int v);
 int ksqrt(int v);
+extern int randomseed;
 int krand(void);
 int wrand(void);
 int getangle(int xvect, int yvect);

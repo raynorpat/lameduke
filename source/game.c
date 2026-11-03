@@ -3,6 +3,7 @@
 #include "menus.h"
 #include "sounds.h"
 #include "demo.h"
+#include "global.h"
 
 #include "cache1d.h"
 #include "engine.h"
@@ -320,6 +321,7 @@ int main(int argc, char **argv)
     printf("video %dx%d\n", xdim, ydim);
 
     if (game_level_set) {
+        newgame(game_volume, game_level, game_skill);
         enterlevel(4);
         play_level(game_demorec);
     } else {
@@ -331,6 +333,10 @@ int main(int argc, char **argv)
             game_volume = demo.volume;
             game_level = demo.level;
             game_skill = demo.skill;
+            /* 0x1B810 reads the demo header into player 0 */
+            ps[0].volume = (unsigned char)demo.volume;
+            ps[0].level = (unsigned char)demo.level;
+            ps[0].skill = (unsigned char)demo.skill;
             enterlevel(2);
             if (play_demo(&demo)) {
                 demo_free(&demo);

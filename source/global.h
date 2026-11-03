@@ -3,6 +3,7 @@
 
 #include "game.h"
 #include "board.h"
+#include "network.h"
 
 #define MAXPLAYERS 17
 
@@ -48,7 +49,7 @@ extern int hittype[MAXSPRITES][5];
 extern signed char syncfvel[MAXPLAYERS], syncsvel[MAXPLAYERS], syncavel[MAXPLAYERS];
 extern int syncbits[MAXPLAYERS];
 extern unsigned char synctics;       /* 0x1257C1 */
-extern short connecthead, connectpoint2[MAXPLAYERS], numplayers, screenpeek;
+extern short screenpeek;
 extern int lockclock;                /* 0x125304 */
 extern short gamepaused, cameraspr;  /* 0x1257B3, 0x1257B5 */
 extern short myconnectindex;         /* word_12538C */

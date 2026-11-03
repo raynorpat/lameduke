@@ -6,4 +6,7 @@
 
 int initmultiplayers(int comm, int rate);
 
+/* 0x23E130 and on: the player ring, 17 slots. */
+extern short connecthead, connectpoint2[17], numplayers;
+
 #endif

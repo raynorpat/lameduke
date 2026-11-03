@@ -5,6 +5,7 @@
    uses the same sector, wall and sprite records they walk. */
 
 extern int parallaxtype; /* byte_23DE9D */
+extern int visibility;  /* byte_23DE9E */
 
 void draw_init(void);
 void draw_view(void);

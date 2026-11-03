@@ -41,7 +41,7 @@ const short *sintable(void)
 }
 
 int sqrttable[2048]; /* dword_180E90, filled by 0x49518 */
-static int randomseed; /* 0x23CE1C */
+int randomseed; /* 0x23CE1C */
 
 /* 0x4BBA8. Newton's iteration from 128. */
 static int newton_sqrt(int n)

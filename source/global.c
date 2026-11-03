@@ -7,7 +7,7 @@ playertype ps[MAXPLAYERS];
 signed char syncfvel[MAXPLAYERS], syncsvel[MAXPLAYERS], syncavel[MAXPLAYERS];
 int syncbits[MAXPLAYERS];
 unsigned char synctics;
-short connecthead, connectpoint2[MAXPLAYERS], numplayers = 1, screenpeek, myconnectindex;
+short screenpeek, myconnectindex;
 int lockclock;
 short gamepaused, cameraspr = -1;
 int demomode; /* dword_125258: 1 recording, 2 playing back */

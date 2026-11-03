@@ -7,6 +7,8 @@
 int check_file_id(void);
 void check_args(int argc, char **argv);
 int enterlevel(int mode);
+void newgame(int volume, int level, int skill);
+extern int user_visibility;
 
 /* 0-based. /v1 /l1 stores volume 0, level 0. /r sets game_demorec. */
 extern int game_volume;
