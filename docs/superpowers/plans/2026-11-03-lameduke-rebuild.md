@@ -25,6 +25,8 @@
 
 There is no test framework, and the spec says not to add one. Every task is checked by running `build/d3d.exe` from the repo root and comparing the result with a DOSBox capture of `D3D.EXE` made with the same command line and the shipped `SETUP.DAT`. Task 1 adds two debug variables so these checks can be repeated:
 
+For DOSBox, use a disposable copy of `D3D.EXE` and the game files. The original executable requires a matching `FILE_ID.DIZ`; if it is missing, startup prints `No good.` and deletes the executable it was launched from. Never run this check against the only copy of the executable. A local, untracked reference fixture can be reconstructed from the pattern at `0x8291C`: `check_file_id` at `0x24E00` reads 450 bytes and compares 400 pattern bytes, treating each `*` as two skipped file bytes before the next pattern byte. A fixture using CRLF for those skipped bytes allowed the copied executable to start. Do not treat the fixture as a shipped file.
+
 - `LAMEDUKE_FRAME=out.bmp` (already exists) plus `LAMEDUKE_FRAME_AT=N`: write the Nth presented frame, then exit. Unset `LAMEDUKE_FRAME_AT` means N=1, the current behavior.
 - `LAMEDUKE_TRACE=1`: after each demo sample, print `sample i x y z ang cursectnum` to stdout. This is used for repeatable checks that the tree does not regress. It is not a reference, because the executable has no such output.
 
@@ -33,7 +35,7 @@ Build: `cmake --preset default && cmake --build --preset default`. The binary is
 ## Review Focus
 
 1. **Case-sensitive filesystem.** On Linux/macOS, `lookup.dat` must open `LOOKUP.DAT` and `fastway2.mid` must open `FASTWAY2.mid`. Task 1 has the test.
-2. **A missing file the executable names.** `waterfal.voc`, `switch.voc`, `FILE_ID.DIZ`, an unused save slot, or a missing demo must behave as the executable does, with no crash. Tests are in Task 1 (`FILE_ID.DIZ`), Task 7 (VOC), and Task 9 (save slot).
+2. **A missing file the executable names.** Check `waterfal.voc`, `switch.voc`, an unused save slot, and a missing demo against the executable, with no crash. Tests are in Task 7 (VOC) and Task 9 (save slot). `FILE_ID.DIZ` is a special case: the executable's missing-file response is destructive, as documented above; the current port instead allows startup without it.
 3. **No audio device.** If the audio device cannot be opened, or SDL audio fails, the game runs silent the way the executable does when card init fails. It does not `errorexit`. Task 7 has the test.
 4. **Long stall or window drag mid-demo.** Demo state comes from the recorded tics only, so a 2-second stall must not change the trace. Task 6 has the test.
 5. **`/oDIR` to a missing or read-only directory.** A save or demo record must report what the executable reports. It must never claim success. Task 2 has the test.
@@ -53,7 +55,7 @@ Build: `cmake --preset default && cmake --build --preset default`. The binary is
 
 - [ ] **Step 1: Reproduce.** On Linux or macOS (or WSL in the repo dir), run `./build/d3d` and expect it to fail on `lookup.dat` or `tables.dat`. Write down the failure.
 - [ ] **Step 2: Implement** `plat_fopen` and replace every listed `fopen`. Spell each name the way the executable's string spells it (lowercase, for example `"palette.dat"` and not `"PALETTE.DAT"`).
-- [ ] **Step 3: Verify.** On Linux run `./build/d3d`: the attract demo starts. On Windows it is unchanged. `check_file_id()` with no `FILE_ID.DIZ` still returns 0, which is what the shipped release needs.
+- [ ] **Step 3: Verify.** On Linux run `./build/d3d`: the attract demo starts. On Windows it is unchanged. The current port's `check_file_id()` returns 0 without `FILE_ID.DIZ`; this differs from the original executable, which reports `No good.` and deletes its executable when the file is missing. The port's non-destructive behavior allows the supplied files to start without the missing identification file.
 - [ ] **Step 4: Implement** `LAMEDUKE_FRAME_AT` and `LAMEDUKE_TRACE` in `game.c`. When `LAMEDUKE_FRAME` is set, demo playback skips its wall-clock wait so captures are fast.
 - [ ] **Step 5: Verify.** Run `LAMEDUKE_TRACE=1 ./build/d3d > t0.txt` and stop it after one demo. Run it again. The two files are identical. Run `LAMEDUKE_FRAME=f.bmp LAMEDUKE_FRAME_AT=200 ./build/d3d`: it writes `f.bmp` and exits 0.
 - [ ] **Step 6: Commit.** Commit the uncommitted ramp and movement work first as its own commit (`game: lift the sync ramp and movement step`), after confirming with the owner. Then `build: open shipped files case-insensitively`.
@@ -99,13 +101,19 @@ Build: `cmake --preset default && cmake --build --preset default`. The binary is
 - [ ] **Step 4: Verify.** `./build/d3d` prints the same compile text as DOSBox, and the script length, label count, and first 64 words match Step 2. A copy of `GAME.CON` with one bad keyword prints the executable's error for it.
 - [ ] **Step 5: Commit:** `game: compile GAME.CON as the executable does`
 
-### Task 5: Simulation: CON execution, actors, sectors, player
+### Task 5: Simulation: CON execution, actors, sectors, player — complete
 
 **Files:** `source/game.c`, `source/premap.c` (`enterlevel`), `source/global.c`, `source/build/board.c` (`player_move`, clipmove, getzrange as the executable has them), `source/build/sdl_input.c`. A new `source/actors.c` only if the executable's code layout shows a separate unit there. Otherwise this goes in `game.c`.
 
 **Interfaces:**
 - Consumes: Task 4 script tables, Task 3 `drawrooms`.
 - Produces: `void game_tic(int fvel, int svel, int avel, int tics, int bits);`, one sync sample of the whole simulation (player, weapons, actors, sector motion, doors). It replaces the direct `player_move` calls in `play_demo` and `play_level`. `void input_sample(...)` (exists) gains the hardcoded sync-bit keys and `setup.dat` scancodes, so it returns `bits` as well.
+
+**Completion:** The owner playtested the game, opened a door, and shot a flying enemy, and accepted Task 5 as complete. Commit `7d13557` corrects local-play clock rounding and weapon spawn positions. The port and the disposable DOSBox reference both reached the level-one start, with close initial views. A 10,000-frame attract run completed without a crash, and repeated shorter traces matched. These checks did not establish that every weapon, enemy, or interaction matches DOSBox; the broader comparisons in Step 3 remain useful follow-up verification.
+
+**Recorded-input comparison:** A disposable demo containing 100 forward samples followed by a use-key input brought both versions up to the same wall; it did not reach a door. A second demo substituted firing for the use input, but the captures were not synchronized closely enough to compare the shot. The screenshots also differed in HUD and weapon presentation; trace the executable's demo view path before attributing that difference to simulation. Disposable inputs and captures are under `.superpowers/playtest/`.
+
+The unchecked steps below retain the original verification detail; completion was accepted on the playtest evidence above.
 
 - [ ] **Step 1: In IDA,** map the per-tic path called from `sub_31410`: player, weapon fire, actor walker (statnum lists), sector effectors, doors, and the CON interpreter. Map the sync bit numbers to keys (spec: bits 0 and 1 are A and Z, bit 1 halves the step, bits 19 and 20 are cleared in demos).
 - [ ] **Step 2: Implement** in this order, and check each against DOSBox on `L1.MAP` before the next: player and look, weapons, doors and sector motion, actors and the CON interpreter.
@@ -118,6 +126,8 @@ Build: `cmake --preset default && cmake --build --preset default`. The binary is
 
 **Interfaces:**
 - Consumes: `game_tic` from Task 5. Esc opens the menu from Task 9 (until Task 9 lands, Esc leaves the loop as it does now).
+
+**Progress:** Commits `33bd272` and `4345aa6` correct demo pacing and reset the player before each recording. All eight shipped demos completed a fast playback cycle without crashing. In demo 4, samples 1423–1425 contain F3, which opens Restore in the original; the port's menu is deferred to Task 9. For an isolated comparison, a disposable copy suppressed that F3 input and inserted a pause after a chosen sample. The views were close at sample 100, while a later comparison around sample 500 showed a substantially different view. The fixture changes the recording and is a diagnostic, not proof that the unmodified demo matches. Continue tracing the divergence and compare the other demos before completing this task.
 
 - [ ] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
 - [ ] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").

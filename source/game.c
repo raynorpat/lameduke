@@ -176,12 +176,13 @@ static int play_demo(const demo_t *demo)
 {
     int i;
     int hz = demo_hz(demo);
+    int remainder = 0;
+    uint32_t deadline = timer_ticks();
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *trace = getenv("LAMEDUKE_TRACE");
 
     for (i = 0; i < demo->count; i++) {
         int tics = demo->tics[i];
-        uint32_t start;
 
         if (input_poll())
             return 1;
@@ -199,8 +200,10 @@ static int play_demo(const demo_t *demo)
         present();
         if (shot && shot[0])
             continue;
-        start = timer_ticks();
-        while ((int)(timer_ticks() - start) < tics * 1000 / hz) {
+        remainder += tics * 1000;
+        deadline += (uint32_t)(remainder / hz);
+        remainder %= hz;
+        while ((int32_t)(deadline - timer_ticks()) > 0) {
             if (input_poll())
                 return 1;
             SDL_Delay(1);
@@ -214,6 +217,7 @@ static int play_level(int record)
     demo_t rec;
     int cap = 0;
     uint32_t prev;
+    int clock_remainder = 0;
 
     memset(&rec, 0, sizeof rec);
     rec.volume = (unsigned char)game_volume;
@@ -233,14 +237,16 @@ static int play_level(int record)
         per_irq = setup_byte(2) != 0 ? 6 : 1;
         if (elapsed < 0)
             elapsed = 0;
-        irqs = elapsed * 120 / 1000;
+        prev = now;
+        clock_remainder += elapsed * 120;
+        irqs = clock_remainder / 1000;
         if (irqs < 1) {
             SDL_Delay(1);
             continue;
         }
         if (irqs > 40)
             irqs = 40;
-        prev += (uint32_t)(irqs * 1000 / 120);
+        clock_remainder -= irqs * 1000;
         steps = irqs * per_irq;
         if (steps > 255)
             steps = 255;
@@ -345,10 +351,8 @@ int main(int argc, char **argv)
             game_volume = demo.volume;
             game_level = demo.level;
             game_skill = demo.skill;
-            /* 0x1B810 reads the demo header into player 0 */
-            ps[0].volume = (unsigned char)demo.volume;
-            ps[0].level = (unsigned char)demo.level;
-            ps[0].skill = (unsigned char)demo.skill;
+            /* 0x1B810 starts a new game from each demo's header. */
+            newgame(game_volume, game_level, game_skill);
             enterlevel(2);
             if (play_demo(&demo)) {
                 demo_free(&demo);
