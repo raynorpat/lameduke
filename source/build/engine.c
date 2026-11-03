@@ -3,6 +3,8 @@
 #include "draw.h"
 #include "math.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +14,7 @@ static unsigned char setup_keys[17];
 
 static void loadsetup(void)
 {
-    FILE *fp = fopen("setup.dat", "rb");
+    FILE *fp = plat_fopen("setup.dat", "rb");
 
     memset(setup_cfg, 0, sizeof setup_cfg);
     memset(setup_keys, 0, sizeof setup_keys);

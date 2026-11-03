@@ -1,5 +1,7 @@
 #include "demo.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +37,7 @@ int demo_load(int index, demo_t *out)
 
     memset(out, 0, sizeof *out);
     demo_name(index, name, (int)sizeof name);
-    fp = fopen(name, "rb");
+    fp = plat_fopen(name, "rb");
     if (!fp)
         return -1;
     if (fread(head, 1, 3, fp) != 3 || fread(&count, 4, 1, fp) != 1 || count < 0 || count > DEMO_MAX) {
@@ -89,7 +91,7 @@ int demo_save(int index, const demo_t *demo)
     if (count < 0 || count > DEMO_MAX)
         return -1;
     demo_name(index, name, (int)sizeof name);
-    fp = fopen(name, "wb");
+    fp = plat_fopen(name, "wb");
     if (!fp)
         return -1;
     head[0] = demo->volume;

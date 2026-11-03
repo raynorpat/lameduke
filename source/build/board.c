@@ -3,6 +3,8 @@
 #include "engine.h"
 #include "math.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +46,7 @@ int loadboard(const char *filename)
     int i;
 
     free_board();
-    fp = fopen(filename, "rb");
+    fp = plat_fopen(filename, "rb");
     if (!fp)
         return -1;
     if (fread(&version, 4, 1, fp) != 1 || version != 5) {

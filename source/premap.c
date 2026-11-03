@@ -3,6 +3,8 @@
 #include "board.h"
 #include "engine.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +25,7 @@ int game_demorec;
 
 int check_file_id(void)
 {
-    FILE *fp = fopen("FILE_ID.DIZ", "rb");
+    FILE *fp = plat_fopen("FILE_ID.DIZ", "rb");
     if (!fp)
         return 0;
     fclose(fp);

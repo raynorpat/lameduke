@@ -1,5 +1,7 @@
 #include "math.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -13,7 +15,7 @@ int loadtables(void)
 
     if (tables_ok)
         return 0;
-    fp = fopen("tables.dat", "rb");
+    fp = plat_fopen("tables.dat", "rb");
     if (!fp)
         return -1;
     n = fread(tables, 1, sizeof tables, fp);

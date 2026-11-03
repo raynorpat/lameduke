@@ -1,6 +1,8 @@
 #include "display.h"
 #include "engine.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -39,7 +41,7 @@ void setgamemode(void)
 
 int loadlookup(void)
 {
-    FILE *fp = fopen("lookup.dat", "rb");
+    FILE *fp = plat_fopen("lookup.dat", "rb");
     if (!fp)
         return -1;
     fclose(fp);
@@ -53,7 +55,7 @@ int loadpalette(void)
     int i;
 
     memset(palette, 0, sizeof palette);
-    fp = fopen("PALETTE.DAT", "rb");
+    fp = plat_fopen("palette.dat", "rb");
     if (!fp)
         return -1;
     if (fread(raw, 1, sizeof raw, fp) != sizeof raw) {

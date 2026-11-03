@@ -1,5 +1,7 @@
 #include "tiles.h"
 
+#include "platform.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +44,7 @@ static int load_one_art(const char *name)
     short *sizx;
     short *sizy;
 
-    fp = fopen(name, "rb");
+    fp = plat_fopen(name, "rb");
     if (!fp)
         return -1;
     if (fread(&version, 4, 1, fp) != 1 || fread(&numtiles, 4, 1, fp) != 1
