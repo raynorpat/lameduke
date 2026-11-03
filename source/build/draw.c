@@ -14,7 +14,7 @@
 
 #define MAXXDIM 640
 #define MAXYDIM 480
-#define MAXWALLSB 2048
+#define MAXWALLSB 4096 /* the exe; wall sprites use slot 4095 */
 
 static unsigned char frame[MAXXDIM * MAXYDIM];
 
@@ -52,6 +52,7 @@ static int skyswall[MAXXDIM + 1], skylwall[MAXXDIM + 1]; /* 0x137590, 0x136B90 *
 static short radarang[MAXXDIM + 1];          /* word_198E90 */
 static int lastx[MAXYDIM + 2];               /* 0x134E08, indexed by y */
 static int sqrttable[2048];                  /* dword_180E90 */
+static int horizlookup[1024];                /* dword_135AD0: 65536/(i-511), centred at 0x1362D0 */
 
 /* Scan and bunch lists (0x188E90..0x17E590). */
 static int xb1[MAXWALLSB], xb2[MAXWALLSB], yb1[MAXWALLSB], yb2[MAXWALLSB];
@@ -1292,6 +1293,27 @@ static void drawsky(int bunch, short sectnum, int isfloor)
     }
 }
 
+/* The lwall pass drawalls and drawmaskwall share. */
+static void wallxcoords(int z, int xrep)
+{
+    int step = imul(xrep, -ry1[z]);
+    int num = imul(mulscale(xdimen, rx1[z], 2) - mulscale(ry1[z], xb1[z] - (xdimen >> 1), 1), xrep);
+    int dstep = (ry2[z] - ry1[z]) >> 1;
+    int den = mulscale(dstep, xb1[z] - (xdimen >> 1), 1) + mulscale(xdimen, rx1[z] - rx2[z], 3);
+    int x;
+
+    for (x = xb1[z]; x <= xb2[z] + 1; x += 2) {
+        if (den != 0)
+            lwall[x] = (int)(((long long)num << 8) / den);
+        num += step;
+        den += dstep;
+    }
+    for (x = xb1[z] + 1; x <= xb2[z]; x += 2)
+        lwall[x] = (lwall[x - 1] + lwall[x + 1]) >> 1;
+    if (lwall[xb1[z]] < 0)
+        lwall[xb1[z]] = 0;
+}
+
 /* 0x4493D. Ceilings, floors and sky of one bunch, plus the per-column wall
    arrays (lwall, swall, uwall, dwall) that drawwalls then uses. */
 static void drawalls(int bunch)
@@ -1326,21 +1348,8 @@ static void drawalls(int bunch)
         if (ns == -1 || sec->ceilingz < sector[ns].ceilingz || sec->floorz > sector[ns].floorz
             || (wall[w].cstat & 0x20)) {
             int xrep = wall[w].xrepeat;
-            int step = imul(xrep, -ry1[z]);
-            int num = imul(mulscale(xdimen, rx1[z], 2) - mulscale(ry1[z], xb1[z] - (xdimen >> 1), 1), xrep);
-            int dstep = (ry2[z] - ry1[z]) >> 1;
-            int den = mulscale(dstep, xb1[z] - (xdimen >> 1), 1) + mulscale(xdimen, rx1[z] - rx2[z], 3);
 
-            for (x = xb1[z]; x <= xb2[z] + 1; x += 2) {
-                if (den != 0)
-                    lwall[x] = (int)(((long long)num << 8) / den);
-                num += step;
-                den += dstep;
-            }
-            for (x = xb1[z] + 1; x <= xb2[z]; x += 2)
-                lwall[x] = (lwall[x - 1] + lwall[x + 1]) >> 1;
-            if (lwall[xb1[z]] < 0)
-                lwall[xb1[z]] = 0;
+            wallxcoords(z, xrep);
             if (xrep && (xrep << 9) <= lwall[xb2[z]])
                 lwall[xb2[z]] = (xrep << 9) - 1;
             if (wall[w].cstat & 8)
@@ -1474,6 +1483,883 @@ void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, sho
     }
 }
 
+/* mvlineasm 0x7BC24 (skips 255) and tvlineasm 0x7BC72 (blends through transluc). */
+static void mvline(int vinc, int vplc, const unsigned char *pal, int cnt, int shift,
+    const unsigned char *col, unsigned char *dest, int trans)
+{
+    int n = (cnt >> 8) + 1;
+
+    shift &= 31;
+    while (n-- > 0) {
+        unsigned char t = col[(unsigned)vplc >> shift];
+
+        if (t != 255)
+            *dest = trans ? transluc[(*dest << 8) | pal[t]] : pal[t];
+        vplc += vinc;
+        dest += 320;
+    }
+}
+
+/* 0x48494 (masked) and 0x49E44 via 0x48FF9 (translucent). The translucent
+   column always takes the texture x modulo the width. */
+static void maskwallscan(int x1, int x2, const int *uwal, const int *dwal, int trans)
+{
+    int x, sizx, sizy, xpow2, ypow2;
+
+    sizx = tilesizx[globalpicnum];
+    sizy = tilesizy[globalpicnum];
+    if (sizx <= 0 || sizy <= 0)
+        return;
+    if (!trans && !((wbot >= uwal[x1] || wbot >= uwal[x2]) && (wtop <= dwal[x1] || wtop <= dwal[x2])))
+        return;
+    loadtile(globalpicnum);
+    setgotpic(globalpicnum);
+    if (globalorientation & 0x100) {
+        globalyscale = -globalyscale;
+        globalzd = -globalzd;
+    }
+    if (x1 < 0)
+        x1 = 0;
+    if (x2 >= xdimen)
+        x2 = xdimen - 1;
+    xpow2 = (1 << (picsiz[globalpicnum] & 15)) == sizx;
+    ypow2 = (1 << (picsiz[globalpicnum] >> 4)) == sizy;
+    for (x = x1; x <= x2; x++) {
+        int y1, y2, scale, shade, vinc, xu;
+
+        if (swall[x] <= 4)
+            continue;
+        y1 = uwal[x] < umost[x] ? umost[x] : uwal[x];
+        y2 = trans ? (short)(dwal[x] - 1) : dwal[x] - 1;
+        if (y2 >= dmost[x])
+            y2 = trans ? (short)(dmost[x] - 1) : dmost[x] - 1;
+        if (y2 < y1)
+            continue;
+        scale = (int)((65536LL << 16) / swall[x]);
+        shade = globalshade + (scale >> (visibility + 2));
+        if (shade < 0)
+            shade = 0;
+        if (shade >= numpalookups)
+            shade = numpalookups - 1;
+        vinc = imul(globalyscale, scale);
+        xu = globalxpanning + (lwall[x] >> 6);
+        if (trans || !xpow2)
+            xu %= sizx;
+        else
+            xu &= sizx - 1;
+        mvline(vinc, globalzd + imul(y1 - globalhoriz + 1, vinc), palookup[globalpal] + (shade << 8),
+            (y2 - y1) << 8, globalshiftval,
+            waloff[globalpicnum] + (ypow2 && !trans ? xu << (picsiz[globalpicnum] >> 4) : xu * sizy),
+            frame + frameoffset + y1 * pitch() + x, trans && transluc);
+    }
+}
+
+static void fillswall(int z)
+{
+    int iz = 0x8000000 / yb1[z];
+    int izinc = (0x8000000 / yb2[z] - iz) / (xb2[z] - xb1[z] + 1);
+    int x;
+
+    if (xdimen != 320) {
+        iz = mulscale(viewingrange, iz, 16);
+        izinc = mulscale(viewingrange, izinc, 16);
+    }
+    for (x = xb1[z]; x <= xb2[z]; x++) {
+        swall[x] = iz;
+        iz += izinc;
+    }
+}
+
+/* 0x4C322 */
+static void drawmaskwall(short damaskwallcnt)
+{
+    int z = maskwall[damaskwallcnt];
+    short w = thewall[z];
+    short sectnum = thesector[z];
+    sectortype *sec = &sector[sectnum], *nsec = &sector[wall[w].nextsector];
+    int z1, z2, x, k;
+
+    globalpal = sec->floorpal;
+    z1 = sec->ceilingz > nsec->ceilingz ? sec->ceilingz : nsec->ceilingz;
+    z2 = sec->floorz < nsec->floorz ? sec->floorz : nsec->floorz;
+    if (z1 >= z2)
+        return;
+    wallxcoords(z, wall[w].xrepeat);
+    if (wall[w].xrepeat && (wall[w].xrepeat << 9) <= lwall[xb2[z]])
+        lwall[xb2[z]] = (wall[w].xrepeat << 9) - 1;
+    if (wall[w].cstat & 8)
+        for (x = xb1[z]; x <= xb2[z]; x++)
+            lwall[x] = (wall[w].xrepeat << 9) - 1 - lwall[x];
+    wallmost(uwall2, z, z1 - globalposz);
+    wallmost(dwall2, z, z2 - globalposz);
+    fillswall(z);
+    globalorientation = wall[w].cstat;
+    globalpicnum = wall[w].overpicnum;
+    if ((unsigned)globalpicnum >= MAXTILES)
+        globalpicnum = 0;
+    globalxpanning = wall[w].xpanning;
+    globalypanning = wall[w].ypanning;
+    if (picanm[globalpicnum] & 0xC0)
+        globalpicnum += animateoffs(globalpicnum);
+    globalshade = wall[w].shade;
+    setshiftval();
+    globalyscale = wall[w].yrepeat << (globalshiftval - 19);
+    globalzd = (globalypanning << 24)
+        + (imul(globalyscale, globalposz - ((globalorientation & 4) ? z2 : z1)) << 8);
+    for (x = xb1[z]; x <= xb2[z]; x++) {
+        umost[x] = startumost[x];
+        dmost[x] = startdmost[x];
+    }
+    for (k = 0; k < smostwallcnt; k++) {
+        int i = smostwall[k] & 0x3FFF;
+        int xa = xb1[i], xe = xb2[i];
+
+        if (xa > xb2[z] || xe < xb1[z] || wallfront(i, z) != i)
+            continue;
+        if (xa < xb1[z])
+            xa = xb1[z];
+        if (xe > xb2[z])
+            xe = xb2[z];
+        switch (smostwall[k] & 0xC000) {
+        case 0:
+            for (x = xa; x <= xe; x++) {
+                umost[x] = 1;
+                dmost[x] = 0;
+            }
+            break;
+        case 0x4000:
+            for (x = xa; x <= xe; x++)
+                if (smost[smoststart[k] - xb1[i] + x] > umost[x])
+                    umost[x] = smost[smoststart[k] - xb1[i] + x];
+            break;
+        case 0x8000:
+            for (x = xa; x <= xe; x++)
+                if (smost[smoststart[k] - xb1[i] + x] < dmost[x])
+                    dmost[x] = smost[smoststart[k] - xb1[i] + x];
+            break;
+        }
+    }
+    if (globalorientation & 0x80) {
+        for (x = xb1[z]; umost[x] > dmost[x] && x <= xb2[z]; x++)
+            ;
+        maskwallscan(x, xb2[z], uwall2, dwall2, 1);
+    } else {
+        maskwallscan(xb1[z], xb2[z], uwall2, dwall2, 0);
+    }
+}
+
+/* 0x447D6 */
+static int spritewallfront(short s, short w)
+{
+    walltype *wal = &wall[w];
+    int x1 = wal->x, y1 = wal->y;
+
+    return imul(wall[wal->point2].x - x1, sprite[s].y - y1)
+        >= imul(wall[wal->point2].y - y1, sprite[s].x - x1);
+}
+
+/* The smost pass all three sprite kinds share. A closed record (type 0) sets
+   the bottom to wtop. Floor sprites take one off the saved ceiling rows. */
+static void clipsmost(short spritenum, int depth, int x1, int x2, int *top, int *bot, int facesprite, int topbias)
+{
+    int k, x;
+
+    for (k = 0; k < smostwallcnt; k++) {
+        int i = smostwall[k] & 0x3FFF;
+        int xa = xb1[i], xe = xb2[i];
+        int front;
+
+        if (xa > x2 || xe < x1 || !((yb1[i] << 8) < depth || (yb2[i] << 8) < depth))
+            continue;
+        if (facesprite) {
+            front = !spritewallfront(spritenum, thewall[i])
+                || ((yb1[i] << 8) < depth && (yb2[i] << 8) < depth);
+        } else {
+            walltype *wal = &wall[thewall[i]];
+            int t1 = imul(wall[wal->point2].x - wal->x, sprite[spritenum].y - wal->y);
+            int t2 = imul(sprite[spritenum].x - wal->x, wall[wal->point2].y - wal->y);
+
+            front = t1 - t2 < 0 || (t1 == t2 && wal->nextsector == sprite[spritenum].sectnum);
+        }
+        if (!front)
+            continue;
+        if (xa < x1)
+            xa = x1;
+        if (xe > x2)
+            xe = x2;
+        switch (smostwall[k] & 0xC000) {
+        case 0:
+            for (x = xa; x <= xe; x++)
+                bot[x] = wtop;
+            break;
+        case 0x4000:
+            for (x = xa; x <= xe; x++) {
+                int v = smost[smoststart[k] - xb1[i] + x] - topbias;
+
+                if (v > top[x])
+                    top[x] = v;
+            }
+            break;
+        case 0x8000:
+            for (x = xa; x <= xe; x++)
+                if (smost[smoststart[k] - xb1[i] + x] < bot[x])
+                    bot[x] = smost[smoststart[k] - xb1[i] + x];
+            break;
+        }
+    }
+}
+
+static int sectorshade(short sectnum)
+{
+    return (sector[sectnum].ceilingstat & 1) ? sector[sectnum].ceilingshade : sector[sectnum].floorshade;
+}
+
+/* mhlineasm 0x7C234 / thlineasm 0x7C374, as 0x4F2A9 drives them for floor sprites. */
+static const unsigned char *spanpal;
+
+static void floorspritespan(int x1, int x2, int y)
+{
+    int d, half = xdimen >> 1, xlog, ylog, n, uinc, vinc;
+    unsigned u, v;
+    unsigned char *dest;
+    const unsigned char *tex = waloff[globalpicnum];
+
+    if (x2 < x1)
+        return;
+    d = mulscale(horizlookup[512 + y - globalhoriz], globalzd, 16);
+    u = (unsigned)(int)(((long long)(imul(half, d) - globalypanning) * globalx1
+        + (long long)(imul(d, x1 - half) - globalxpanning) * globalx2) >> 6);
+    v = (unsigned)(int)(((long long)(imul(half, d) - globalypanning) * globaly1
+        + (long long)(imul(d, x1 - half) - globalxpanning) * globaly2) >> 6);
+    uinc = mulscale(d, globalx2, 6);
+    vinc = mulscale(d, globaly2, 6);
+    xlog = picsiz[globalpicnum] & 15;
+    ylog = picsiz[globalpicnum] >> 4;
+    dest = frame + frameoffset + y * pitch() + x1;
+    for (n = x2 - x1 + 1; n > 0; n--) {
+        unsigned idx = u >> ((32 - xlog) & 31);
+        unsigned char t;
+
+        if (ylog)
+            idx = (idx << ylog) | (v >> (32 - ylog));
+        t = tex[idx];
+        if (t != 255)
+            *dest = (globalorientation & 2) ? transluc[(*dest << 8) | spanpal[t]] : spanpal[t];
+        dest++;
+        u += (unsigned)uinc;
+        v += (unsigned)vinc;
+    }
+}
+
+static int cliptop(int v)
+{
+    return v < -1 ? -1 : v > 199 ? 199 : v;
+}
+
+static int clipbot(int v)
+{
+    return v < 0 ? 0 : v > 200 ? 200 : v;
+}
+
+/* 0x4F117. The ceilscan sweep over umost/dmost, clamped to rows -1..200. */
+static void floorspritescan(int x1, int x2)
+{
+    int x, y1, y2, twall, bwall;
+
+    y1 = cliptop(umost[x1]);
+    y2 = clipbot(umost[x1]);
+    for (x = x1; x < x2; x++) {
+        twall = umost[x];
+        bwall = dmost[x];
+        if (twall >= bwall - 1) {
+            while (y1 < y2 - 1) {
+                floorspritespan(lastx[y1 + 1], x - 1, y1 + 1);
+                y1++;
+            }
+            y1 = cliptop(umost[x + 1]);
+            y2 = clipbot(umost[x + 1]);
+            continue;
+        }
+        twall = cliptop(twall);
+        bwall = clipbot(bwall);
+        if (twall < y2) {
+            while (y1 < twall) {
+                floorspritespan(lastx[y1 + 1], x - 1, y1 + 1);
+                y1++;
+            }
+            while (y1 > twall)
+                lastx[y1--] = x;
+        } else {
+            while (y1 < y2 - 1) {
+                floorspritespan(lastx[y1 + 1], x - 1, y1 + 1);
+                y1++;
+            }
+            y1 = twall;
+        }
+        while (y2 > bwall) {
+            y2--;
+            floorspritespan(lastx[y2], x - 1, y2);
+        }
+        while (y2 < bwall)
+            lastx[y2++] = x;
+    }
+    while (y1 < y2 - 1) {
+        floorspritespan(lastx[y1 + 1], x2 - 1, y1 + 1);
+        y1++;
+    }
+}
+
+/* The floor-sprite half of 0x4CA84: rotate the four corners into view space,
+   clip against the near, side, top and bottom planes, and fill umost/dmost. */
+static void drawfloorsprite(int depth, short tilenum, short spritenum, int pal, int cstat, short sectnum)
+{
+    spritetype *spr = &sprite[spritenum];
+    int px[8], py[8], pz[8], qx[8], qy[8], qz[8], sx[8], sy[8];
+    int xs, ys, ang, c, s, xsiz = tilesizx[tilenum], ysiz = tilesizy[tilenum];
+    int xoff = (signed char)(picanm[tilenum] >> 8), yoff = (signed char)(picanm[tilenum] >> 16);
+    int ax, ay, bx, by, i, n, m, nn, z, a, b, len, v1, v2;
+    int minx = 0x7FFFFFFF, maxx = (int)0x80000000;
+    int imin = -1, imax = -1, j, x, x1, x2, shade;
+
+    if (cstat & 4)
+        xoff = -xoff;
+    if (cstat & 8)
+        yoff = -yoff;
+    if ((cstat & 0x40) && (globalposz > spr->z) == !(cstat & 8))
+        return;
+    xs = spr->x - globalposx;
+    ys = spr->y - globalposy;
+    px[0] = dmulscale(xs, cosglobalang, ys, singlobalang, 14);
+    ang = (spr->ang + 2048 - globalang) & 2047;
+    py[0] = dmulscale(ys, cosglobalang, xs, -singlobalang, 14);
+    c = sintable()[(ang + 512) & 2047];
+    s = sintable()[ang];
+    ax = spr->xrepeat * (xoff + (xsiz >> 1));
+    ay = spr->yrepeat * (yoff + (ysiz >> 1));
+    px[0] += dmulscale(ax, s, ay, c, 16);
+    bx = ysiz * spr->yrepeat;
+    by = spr->xrepeat * xsiz;
+    py[0] += dmulscale(ay, s, ax, -c, 16);
+    px[1] = px[0] - mulscale(by, s, 16);
+    py[1] = py[0] + mulscale(by, c, 16);
+    a = -mulscale(bx, c, 16);
+    b = -mulscale(bx, s, 16);
+    px[2] = a + px[1];
+    py[2] = b + py[1];
+    px[3] = a + px[0];
+    py[3] = b + py[0];
+    z = 16 * (spr->z - globalposz) / 320;
+    pz[0] = z;
+    if (z == 0)
+        return;
+    pz[1] = pz[2] = pz[3] = z;
+    {
+        int i0 = (cstat & 4) ? 1 : 0, i1 = (cstat & 4) ? 0 : 1, i3 = (cstat & 4) ? 2 : 3;
+        int dx, dy;
+
+        globalxpanning = py[i0] << 16;
+        globalypanning = px[i0] << 16;
+        globalzd = pz[i0] << 16;
+        dy = py[i1] - py[i0];
+        dx = px[i1] - px[i0];
+        len = imul(dx, dx) + imul(dy, dy);
+        if (!((dx < 0 ? -dx : dx) >> 23 < len && (dy < 0 ? -dy : dy) >> 23 < len))
+            return;
+        globalx1 = (int)(((long long)dx << 22) / len);
+        globalx2 = (int)(((long long)dy << 22) / len);
+        dx = px[i3] - px[i0];
+        dy = py[i3] - py[i0];
+        len = imul(dy, dy) + imul(dx, dx);
+        if (!((dx < 0 ? -dx : dx) >> 23 < len && (dy < 0 ? -dy : dy) >> 23 < len))
+            return;
+        globaly1 = (int)(((long long)dx << 22) / len);
+        globaly2 = (int)(((long long)dy << 22) / len);
+    }
+    if (pz[0] < 0) {
+        int t = py[1];
+
+        py[1] = py[3];
+        py[3] = t;
+        t = px[1];
+        px[1] = px[3];
+        px[3] = t;
+    }
+    /* Keep x + y >= 0. */
+    n = 0;
+    v2 = px[0] + py[0];
+    for (i = 0; i < 4; i++) {
+        int k = i == 3 ? 0 : i + 1;
+
+        v1 = v2;
+        v2 = px[k] + py[k];
+        if (v1 >= 0) {
+            qy[n] = py[i];
+            qz[n] = pz[i];
+            qx[n++] = px[i];
+        }
+        if ((v2 ^ v1) < 0) {
+            int t = (int)(((long long)v1 << 16) / (v1 - v2));
+
+            qy[n] = py[i] + mulscale(py[k] - py[i], t, 16);
+            qz[n] = pz[i] + mulscale(pz[k] - pz[i], t, 16);
+            qx[n++] = px[i] + mulscale(px[k] - px[i], t, 16);
+        }
+    }
+    if (n <= 2)
+        return;
+    /* Keep y - x <= 0. */
+    m = 0;
+    v2 = qy[0] - qx[0];
+    for (i = 0; i < n; i++) {
+        int k = i + 1 == n ? 0 : i + 1;
+
+        v1 = v2;
+        v2 = qy[k] - qx[k];
+        if (v1 <= 0) {
+            py[m] = qy[i];
+            px[m] = qx[i];
+            pz[m++] = qz[i];
+        }
+        if ((v2 ^ v1) < 0) {
+            int t = (int)(((long long)v1 << 16) / (v1 - v2));
+
+            py[m] = qy[i] + mulscale(qy[k] - qy[i], t, 16);
+            pz[m] = qz[i] + mulscale(qz[k] - qz[i], t, 16);
+            px[m++] = qx[i] + mulscale(qx[k] - qx[i], t, 16);
+        }
+    }
+    if (m <= 2)
+        return;
+    /* Keep below the top row. */
+    nn = 0;
+    v2 = 160 * pz[0] + (globalhorizraw - wtop) * px[0];
+    for (i = 0; i < m; i++) {
+        int k = i + 1 == m ? 0 : i + 1;
+
+        v1 = v2;
+        v2 = 160 * pz[k] + (globalhorizraw - wtop) * px[k];
+        if (v1 >= 0) {
+            qy[nn] = py[i];
+            qx[nn] = px[i];
+            qz[nn++] = pz[i];
+        }
+        if ((v2 ^ v1) < 0) {
+            int t = (int)(((long long)v1 << 16) / (v1 - v2));
+
+            qy[nn] = py[i] + mulscale(py[k] - py[i], t, 16);
+            qz[nn] = pz[i] + mulscale(pz[k] - pz[i], t, 16);
+            qx[nn++] = px[i] + mulscale(px[k] - px[i], t, 16);
+        }
+    }
+    if (nn <= 2)
+        return;
+    /* Keep above the bottom row. */
+    m = 0;
+    v2 = 160 * qz[0] - (wbot - globalhorizraw) * qx[0];
+    for (i = 0; i < nn; i++) {
+        int k = i + 1 == nn ? 0 : i + 1;
+
+        v1 = v2;
+        v2 = 160 * qz[k] - (wbot - globalhorizraw) * qx[k];
+        if (v1 <= 0) {
+            py[m] = qy[i];
+            px[m] = qx[i];
+            pz[m++] = qz[i];
+        }
+        if ((v2 ^ v1) < 0) {
+            int t = (int)(((long long)v1 << 16) / (v1 - v2));
+
+            py[m] = qy[i] + mulscale(qy[k] - qy[i], t, 16);
+            pz[m] = qz[i] + mulscale(qz[k] - qz[i], t, 16);
+            px[m++] = qx[i] + mulscale(qx[k] - qx[i], t, 16);
+        }
+    }
+    if (m <= 2)
+        return;
+    for (i = 0; i < m; i++) {
+        sx[i] = (xdimen << 15) + (int)((long long)(xdimen << 15) * py[i] / px[i]);
+        sy[i] = (globalhoriz << 16) + (int)((long long)(xdimen << 15) * pz[i] / px[i]);
+        if (sx[i] < 0)
+            sx[i] = 0;
+        if ((xdimen << 16) < sx[i])
+            sx[i] = xdimen << 16;
+        if ((wtop << 16) > sy[i])
+            sy[i] = wtop << 16;
+        if ((wbot << 16) < sy[i])
+            sy[i] = wbot << 16;
+        if (sx[i] < minx) {
+            minx = sx[i];
+            imin = i;
+        }
+        if (sx[i] > maxx) {
+            maxx = sx[i];
+            imax = i;
+        }
+    }
+    for (j = imin; j != imax; j = i) {
+        int xa, xe;
+
+        i = j + 1 == m ? 0 : j + 1;
+        xa = (sx[j] + 0xFFFF) >> 16;
+        xe = (sx[i] + 0xFFFF) >> 16;
+        if (xe > xa) {
+            int slope = (int)(((long long)(sy[i] - sy[j]) << 16) / (sx[i] - sx[j]));
+            int yy = sy[j] + mulscale(slope, (xa << 16) - sx[j], 16);
+
+            for (x = xa; x < xe; x++) {
+                umost[x] = (yy >> 16) - 1;
+                yy += slope;
+            }
+        }
+    }
+    while (j != imin) {
+        int xa, xe;
+
+        i = j + 1 == m ? 0 : j + 1;
+        xa = (sx[j] + 0xFFFF) >> 16;
+        xe = (sx[i] + 0xFFFF) >> 16;
+        if (xa > xe) {
+            int slope = (int)(((long long)(sy[i] - sy[j]) << 16) / (sx[i] - sx[j]));
+            int yy = sy[i] + mulscale(slope, (xe << 16) - sx[i], 16);
+
+            for (x = xe; x < xa; x++) {
+                dmost[x] = yy >> 16;
+                yy += slope;
+            }
+        }
+        j = i;
+    }
+    x1 = (minx + 0xFFFF) >> 16;
+    x2 = (maxx + 0xFFFF) >> 16;
+    for (x = x1; x <= x2; x++) {
+        if (startumost[x] - 1 > umost[x])
+            umost[x] = startumost[x] - 1;
+        if (dmost[x] > startdmost[x])
+            dmost[x] = startdmost[x];
+    }
+    clipsmost(spritenum, depth, x1, x2, umost, dmost, 0, 1);
+    globalorientation = cstat;
+    globalpicnum = tilenum;
+    loadtile(globalpicnum);
+    setgotpic(globalpicnum);
+    globalpal = pal;
+    shade = (depth >> (visibility + 4)) + spr->shade + 6 + sectorshade(sectnum);
+    if (shade < 0)
+        shade = 0;
+    if (numpalookups <= shade)
+        shade = numpalookups - 1;
+    globalshade = shade;
+    spanpal = palookup[globalpal] + (shade << 8);
+    floorspritescan(x1, x2);
+}
+
+/* 0x4CA84 */
+static void drawsprite(int sxpos, int depth, short tilenum, short spritenum, int pal)
+{
+    spritetype *spr;
+    int cstat, xoff, yoff, xsiz, ysiz, x, sectnum;
+
+    if (picanm[tilenum] & 0xC0)
+        tilenum += animateoffs(tilenum);
+    if ((unsigned)tilenum >= MAXTILES || tilesizx[tilenum] <= 0 || tilesizy[tilenum] <= 0 || spritenum < 0)
+        return;
+    spr = &sprite[spritenum];
+    cstat = spr->cstat;
+    sectnum = spr->sectnum;
+    if ((cstat & 2) && !transluc)
+        cstat &= ~2;
+    yoff = (signed char)(picanm[tilenum] >> 16);
+    xoff = (signed char)(picanm[tilenum] >> 8);
+    if (cstat & 4)
+        xoff = -xoff;
+    if (cstat & 8)
+        yoff = -yoff;
+    xsiz = tilesizx[tilenum];
+    ysiz = tilesizy[tilenum];
+
+    if ((cstat & 0x30) == 0x10) {
+        int xv = spr->xrepeat * sintable()[(spr->ang + 4096) & 2047];
+        int yv = sintable()[(spr->ang + 3584) & 2047] * spr->xrepeat;
+        int x1 = spr->x - mulscale((xsiz >> 1) + xoff, xv, 16) - globalposx;
+        int y1 = spr->y - mulscale((xsiz >> 1) + xoff, yv, 16) - globalposy;
+        int yp1 = (imul(y1, cosglobalang) - imul(x1, singlobalang)) >> 14;
+        int xp1 = (imul(x1, cosglobalang) + imul(y1, singlobalang)) >> 14;
+        int x2 = mulscale(xsiz, xv, 16) + x1;
+        int y2 = mulscale(xsiz, yv, 16) + y1;
+        int yp2 = (imul(y2, cosglobalang) - imul(x2, singlobalang)) >> 14;
+        int xp2 = (imul(y2, singlobalang) + imul(cosglobalang, x2)) >> 14;
+        int swapped = 0, z = MAXWALLSB - 1, zt, zb, num, den, dinc, i;
+        sectortype *sec = &sector[sectnum];
+
+        if (imul(xp2, yp1) > imul(xp1, yp2)) {
+            int t = yp1;
+
+            yp1 = yp2;
+            yp2 = t;
+            t = xp1;
+            xp1 = xp2;
+            xp2 = t;
+            swapped = 1;
+        }
+        if ((cstat & 0x40) && swapped == 1)
+            return;
+        if (xp1 <= 0 && xp2 <= 0)
+            return;
+        if (-xp1 > yp1) {
+            if (-xp2 > yp2)
+                return;
+            xb1[z] = 0;
+            den = yp1 + xp1 - xp2 - yp2;
+            if (den == 0)
+                return;
+            yb1[z] = (int)((long long)(yp1 + xp1) * (xp2 - xp1) / den) + xp1;
+        } else {
+            if (yp1 > xp1 || xp1 == 0)
+                return;
+            xb1[z] = (int)((long long)(xdimen >> 1) * yp1 / xp1) + (xdimen >> 1);
+            if (yp1 >= 0)
+                xb1[z]++;
+            if (xb1[z] >= xdimen)
+                xb1[z] = xdimen - 1;
+            yb1[z] = xp1;
+        }
+        if (yp2 > xp2) {
+            if (yp1 > xp1)
+                return;
+            xb2[z] = xdimen - 1;
+            den = yp2 - yp1 + xp1 - xp2;
+            if (den == 0)
+                return;
+            yb2[z] = (int)((long long)(xp1 - yp1) * (xp2 - xp1) / den) + xp1;
+        } else {
+            if (-xp2 > yp2 || xp2 == 0)
+                return;
+            xb2[z] = (xdimen >> 1) + (int)((long long)(xdimen >> 1) * yp2 / xp2) - 1;
+            if (yp2 >= 0)
+                xb2[z] = (xdimen >> 1) + (int)((long long)(xdimen >> 1) * yp2 / xp2);
+            if (xb2[z] >= xdimen)
+                xb2[z] = xdimen - 1;
+            yb2[z] = xp2;
+        }
+        if (yb1[z] <= 0 || yb2[z] <= 0 || xb1[z] > xb2[z])
+            return;
+        den = mulscale(xdimen, yp1 - yp2, 3);
+        num = imul(mulscale(xdimen, yp1, 2) - mulscale(xp1, xb1[z] - (xdimen >> 1), 1), xsiz) >> 3;
+        dinc = mulscale((xp2 - xp1) >> 1, xb1[z] - (xdimen >> 1), 1);
+        for (i = xb1[z];; i += 2) {
+            den += dinc;
+            if (i > xb2[z] + 1)
+                break;
+            if (den != 0)
+                lwall[i] = (int)(((long long)num << 8) / den);
+            dinc = (xp2 - xp1) >> 1;
+            num -= imul(xsiz, xp1) >> 3;
+        }
+        for (i = xb1[z] + 1; i <= xb2[z]; i += 2)
+            lwall[i] = (lwall[i - 1] + lwall[i + 1]) >> 1;
+        if (lwall[xb1[z]] < 0)
+            lwall[xb1[z]] = 0;
+        if ((xsiz << 6) <= lwall[xb2[z]])
+            lwall[xb2[z]] = (xsiz << 6) - 1;
+        if (((cstat & 4) != 0) != swapped)
+            for (i = xb1[z]; i <= xb2[z]; i++)
+                lwall[i] = (xsiz << 6) - 1 - lwall[i];
+        rx1[z] = yp1;
+        ry1[z] = xp1;
+        rx2[z] = yp2;
+        ry2[z] = xp2;
+        zb = spr->z - 4 * spr->yrepeat * yoff;
+        zt = zb - 4 * ysiz * spr->yrepeat;
+        globalpal = pal;
+        globalorientation = 0;
+        globalpicnum = tilenum;
+        globalxpanning = 0;
+        globalypanning = 0;
+        globalshade = spr->shade + 6 + sectorshade((short)sectnum);
+        setshiftval();
+        globalyscale = (int)((512LL << ((globalshiftval - 19) & 31)) / spr->yrepeat);
+        globalzd = imul(globalyscale, globalposz - zt) << 8;
+        if (cstat & 8) {
+            globalzd = imul(-globalyscale, globalposz - zb) << 8;
+            globalyscale = -globalyscale;
+        }
+        if (!(sec->ceilingstat & 1) && zt < sec->ceilingz)
+            zt = sec->ceilingz;
+        if (!(sec->floorstat & 1) && zb > sec->floorz)
+            zb = sec->floorz;
+        wallmost(uwall2, z, zt - globalposz);
+        wallmost(dwall2, z, zb - globalposz);
+        fillswall(z);
+        for (x = xb1[z]; x <= xb2[z]; x++) {
+            umost[x] = startumost[x];
+            dmost[x] = startdmost[x];
+        }
+        clipsmost(spritenum, depth, xb1[z], xb2[z], umost, dmost, 0, 0);
+        if (cstat & 2) {
+            for (x = xb1[z]; umost[x] > dmost[x] && x <= xb2[z]; x++)
+                ;
+            maskwallscan(x, xb2[z], uwall2, dwall2, 1);
+        } else {
+            maskwallscan(xb1[z], xb2[z], uwall2, dwall2, 0);
+        }
+        return;
+    }
+    if ((cstat & 0x30) == 0x20) {
+        drawfloorsprite(depth, tilenum, spritenum, pal, cstat, (short)sectnum);
+        return;
+    }
+    if ((cstat & 0x30) == 0x30 || depth <= 1024)
+        return;
+    {
+        int scale = (int)(0x800000000LL / depth);
+        int xspan, yspan, xl, xr, top, bot, x1, x2, shade, vinc, ceil, flor, xinc, xpos, t;
+        const unsigned char *pal_row;
+
+        if (xdimen != 320)
+            scale = mulscale(viewingrange, scale, 16);
+        xspan = (int)(((long long)(xsiz * spr->xrepeat) * scale) >> 14);
+        yspan = (int)(((long long)(ysiz * spr->yrepeat) * scale) >> 14);
+        if (!(xsiz >> 11 < xspan && (yspan >> 1) > ysiz))
+            return;
+        xl = sxpos - (xspan >> 1);
+        t = (int)(((long long)(xoff * spr->xrepeat) * scale) >> 14);
+        xl = (cstat & 4) ? t + xl : xl - t;
+        t = mulscale(scale, spr->z - globalposz, 16);
+        bot = (globalhoriz << 8) + t - (int)(((long long)(yoff * spr->yrepeat) * scale) >> 14);
+        top = bot - yspan;
+        xr = xl + xspan;
+        /* The exe sets both low bytes to 0xFF before this compare. */
+        if ((top | 0xFF) >= (bot | 0xFF))
+            return;
+        x1 = (xl >> 8) + 1;
+        if (x1 < 0)
+            x1 = 0;
+        x2 = xr >> 8;
+        if (x2 >= xdimen)
+            x2 = xdimen - 1;
+        shade = (short)(sectorshade((short)sectnum) + (depth >> (visibility + 4)) + spr->shade + 6);
+        if (shade < 0)
+            shade = 0;
+        if (shade >= numpalookups)
+            shade = numpalookups - 1;
+        pal_row = palookup[pal] + (shade << 8);
+        loadtile(tilenum);
+        setgotpic(tilenum);
+        vinc = (int)(((long long)ysiz << 32) / yspan);
+        ceil = (sector[sectnum].ceilingstat & 1) ? 0
+            : globalhoriz + mulscale(sector[sectnum].ceilingz - globalposz, scale, 24) - 1;
+        flor = (sector[sectnum].floorstat & 1) ? 0x7FFFFFFF
+            : globalhoriz + mulscale(sector[sectnum].floorz - globalposz, scale, 24) + 1;
+        if (top >> 8 > ceil)
+            ceil = top >> 8;
+        if (bot >> 8 < flor)
+            flor = bot >> 8;
+        if (cstat & 4) {
+            xinc = -(int)(((long long)xsiz << 20) / xspan);
+            xpos = mulscale(xinc, (x1 << 8) - xr, 8);
+        } else {
+            xinc = (int)(((long long)xsiz << 20) / xspan);
+            xpos = mulscale(xinc, (x1 << 8) - xl, 8);
+        }
+        if (cstat & 8) {
+            vinc = -vinc;
+            top = bot;
+        }
+        for (x = x1; x <= x2; x++) {
+            uwall2[x] = startumost[x] < ceil ? ceil : startumost[x];
+            dwall2[x] = startdmost[x] > flor ? flor : startdmost[x];
+        }
+        clipsmost(spritenum, depth, x1, x2, uwall2, dwall2, 1, 0);
+        for (x = x1; x <= x2; x++) {
+            int y1 = uwall2[x], y2 = dwall2[x] - 1;
+
+            if (y1 < y2)
+                mvline(vinc, mulscale(vinc, (y1 << 8) + 256 - top, 8), pal_row, (y2 - y1) << 8, 24,
+                    waloff[tilenum] + (xpos >> 12) * ysiz, frame + frameoffset + y1 * pitch() + x,
+                    (cstat & 2) != 0);
+            xpos += xinc;
+        }
+    }
+}
+
+/* 0x4BFDB */
+void drawmasks(void)
+{
+    int gap, i, l;
+
+    for (gap = spritesortcnt >> 1; gap > 0; gap >>= 1) {
+        for (i = 0; i < spritesortcnt - gap; i++) {
+            for (l = i; l >= 0 && spritesy[l] > spritesy[l + gap]; l -= gap) {
+                int t;
+                short st;
+                unsigned char b;
+
+                t = spritesx[l];
+                spritesx[l] = spritesx[l + gap];
+                spritesx[l + gap] = t;
+                t = spritesy[l];
+                spritesy[l] = spritesy[l + gap];
+                spritesy[l + gap] = t;
+                st = tspritepicnum[l];
+                tspritepicnum[l] = tspritepicnum[l + gap];
+                tspritepicnum[l + gap] = st;
+                b = tspritepal[l];
+                tspritepal[l] = tspritepal[l + gap];
+                tspritepal[l + gap] = b;
+                st = tspritelist[l];
+                tspritelist[l] = tspritelist[l + gap];
+                tspritelist[l + gap] = st;
+            }
+        }
+    }
+    while (spritesortcnt > 0 && maskwallcnt > 0) {
+        int mw = maskwall[maskwallcnt - 1];
+
+        if (spritewallfront(tspritelist[spritesortcnt - 1], thewall[mw])) {
+            int first = -1, drawn = 0, k;
+
+            for (i = spritesortcnt - 2; i >= 0; i--) {
+                int xs = spritesx[i] >> 8;
+
+                if (xs >= xb1[mw] && xs <= xb2[mw] && !spritewallfront(tspritelist[i], thewall[mw])) {
+                    drawn++;
+                    drawsprite(spritesx[i], spritesy[i], tspritepicnum[i], tspritelist[i], tspritepal[i]);
+                    first = i;
+                    tspritelist[i] = -1;
+                }
+            }
+            if (first >= 0) {
+                l = first;
+                for (k = first; k < spritesortcnt; k++) {
+                    if (tspritelist[k] < 0)
+                        continue;
+                    if (l < k) {
+                        spritesx[l] = spritesx[k];
+                        spritesy[l] = spritesy[k];
+                        tspritepicnum[l] = tspritepicnum[k];
+                        tspritelist[l] = tspritelist[k];
+                        tspritepal[l] = tspritepal[k];
+                    }
+                    l++;
+                }
+                spritesortcnt -= drawn;
+            }
+            drawmaskwall((short)--maskwallcnt);
+        } else {
+            spritesortcnt--;
+            drawsprite(spritesx[spritesortcnt], spritesy[spritesortcnt], tspritepicnum[spritesortcnt],
+                tspritelist[spritesortcnt], tspritepal[spritesortcnt]);
+        }
+    }
+    while (spritesortcnt > 0) {
+        spritesortcnt--;
+        drawsprite(spritesx[spritesortcnt], spritesy[spritesortcnt], tspritepicnum[spritesortcnt],
+            tspritelist[spritesortcnt], tspritepal[spritesortcnt]);
+    }
+    while (maskwallcnt > 0)
+        drawmaskwall((short)--maskwallcnt);
+}
+
 void draw_init(void)
 {
     int i;
@@ -1482,6 +2368,9 @@ void draw_init(void)
         sqrttable[i] = newton_sqrt(i << 20);
     for (i = 0; i <= MAXYDIM + 1; i++)
         lastx[i] = -1;
+    for (i = 0; i < 1024; i++)
+        if (i != 511)
+            horizlookup[i] = 65536 / (i - 511);
 }
 
 void draw_view(void)
@@ -1489,6 +2378,7 @@ void draw_view(void)
     if (!sintable() || !palookup[0])
         return;
     drawrooms(posx, posy, posz, ang, horiz, cursectnum);
+    drawmasks();
 }
 
 const unsigned char *framebuffer(void)
