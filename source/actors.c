@@ -19,6 +19,7 @@ int hittype[MAXSPRITES][5];
 unsigned char show2dsprite[(MAXSPRITES + 7) >> 3]; /* byte_1B4D90 */
 int msx[1024], msy[1024];                          /* 0x122830, 0x123830 */
 int mspos;                                         /* dword_8AC60 */
+short randomstash;
 
 static void markshow2d(short i)
 {
@@ -944,6 +945,425 @@ void movemusic(void)
             if (d >= s->hitag)
                 t[1] = music_volume;
             break;
+        }
+    }
+}
+
+static int movealong(short i, int zchange, int cliptype)
+{
+    spritetype *s = &sprite[i];
+
+    return movesprite(i, (sintable()[(s->ang + 512) & 2047] * s->xvel) >> 14,
+        (s->xvel * sintable()[s->ang & 2047]) >> 14, zchange, 128, 1024, 1024, cliptype, synctics);
+}
+
+static void fallto(spritetype *s)
+{
+    if (s->z >= sector[s->sectnum].floorz) {
+        s->zvel = 0;
+        s->z = sector[s->sectnum].floorz;
+    } else {
+        if (s->zvel < 2048)
+            s->zvel += 256;
+        s->z += s->zvel;
+    }
+}
+
+/* One tic of a tumbling gib of the four-frame run first..first+3: it drips
+   blood (whose heading is t0 << angshift, shl 0x40 being a no-op shift on
+   the 386) and lands as frame first+1 once it has bounced twice within
+   landdist of the floor. */
+static void gibstep(short i, short sect, short first, int zadd, int angshift, int landdist)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i];
+
+    t[0]++;
+    if (t[0] & 1)
+        s->picnum++;
+    if (s->picnum == first + 4)
+        s->picnum = first;
+    s->xvel = s->xvel <= 0 ? 0 : (short)(s->xvel - 1);
+    s->zvel = (short)(s->zvel + zadd);
+    if (movealong(i, s->zvel, 0)) {
+        t[1]++;
+        s->zvel = (short)-s->zvel;
+    }
+    if ((krand() >> 8) >= 239) {
+        int r1 = krand() & 0x20, zv = -(krand() & 511), xv = r1 + (krand() & 31);
+
+        EGS(s->sectnum, s->x, s->y, s->z, 0, 488, -16, 24, 13, (short)(((short)t[0] << angshift) + (krand() & 127)),
+            (short)xv, (short)zv, i, 5);
+    }
+    if (s->z + landdist > sector[sect].floorz && t[1] > 1) {
+        s->picnum = first + 1;
+        s->z = sector[sect].floorz - 512;
+        t[2] = 1;
+        s->cstat |= krand() & 4;
+    }
+}
+
+/* A landed gib waits 256 tics, then goes once no player is near. */
+static int gibrest(short i, int dist)
+{
+    int *t = hittype[i];
+
+    if (t[4] < 256)
+        t[4]++;
+    else if (dist > 4096) {
+        deletesprite(i);
+        return 1;
+    }
+    return 0;
+}
+
+/* 0x394E0. Effects (stat 5): casings, gibs, debris, bubbles and the
+   explosion that throws them. */
+void moveeffects(void)
+{
+    short i, nexti;
+
+    for (i = headspritestat[5]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        int *t = hittype[i], dist;
+        short sect = s->sectnum, p;
+
+        nexti = nextspritestat[i];
+        p = findplayer(i, &dist);
+        switch (s->picnum) {
+        case 215:
+            s->ang = krand() & 2047;
+            s->xvel = (short)(16 - (krand() & 31));
+            /* fall through */
+        case 214:
+        case 488:
+        case 686:
+        case 1359:
+        case 1360:
+        case 1370:
+        case 1404:
+            execute(i, p, dist);
+            continue;
+        }
+        if (s->picnum == 1165) {
+            if (movealong(i, s->zvel, 0) == 0) {
+                if (s->zvel < 512)
+                    s->zvel += 64;
+                if (s->xvel > 0)
+                    s->xvel = s->xvel - 4 < 0 ? 0 : (short)(s->xvel - 4);
+                else if (s->xvel < 0)
+                    s->xvel = s->xvel + 4 > 0 ? 0 : (short)(s->xvel + 4);
+            } else if (t[1]) {
+                deletesprite(i);
+            } else {
+                s->xvel = (short)-s->xvel;
+                s->zvel = (short)-s->zvel;
+                t[1] = 1;
+            }
+            continue;
+        }
+        if (s->picnum == 1190) {
+            if ((sector[sect].lotag & 0x7FFF) != 1 || (t[0] += 128) > 2047) {
+                deletesprite(i);
+                continue;
+            }
+            s->cstat ^= 4;
+            s->xrepeat = s->yrepeat = (unsigned char)((sintable()[t[0]] >> 11) + 8);
+        }
+        if (s->picnum >= 970 && s->picnum <= 973) {
+            fallto(s);
+            movealong(i, s->zvel, 0);
+            if (abs(s->z - sector[sect].floorz) < 2048) {
+                s->zvel = -1024;
+                s->xrepeat >>= 1;
+                s->yrepeat >>= 1;
+                t[0]++;
+            }
+            if (t[0] > 2) {
+                deletesprite(i);
+                continue;
+            }
+        }
+        if (s->picnum >= 1201 && s->picnum <= 1205) {
+            fallto(s);
+            if (s->xvel <= 0) {
+                s->xvel = 0;
+                if ((krand() >> 8) >= 127)
+                    s->cstat ^= 0x80;
+            } else {
+                if (s->zvel > 512) {
+                    if (s->picnum == 1204)
+                        s->picnum = 1202;
+                    if (s->picnum == 1205)
+                        s->picnum = 1203;
+                }
+                if (s->picnum == 1202 || s->picnum == 1203)
+                    s->cstat ^= 4;
+                s->xvel -= 6;
+                if ((krand() >> 8) >= 191)
+                    spawn(i, 686);
+            }
+            if (movealong(i, s->zvel, 0) && sector[sect].floorz - 1024 < s->z) {
+                s->zvel = (short)-s->zvel;
+                if (++t[0] == 3) {
+                    s->z = sector[sect].floorz - 512;
+                    changespritestat(i, 0);
+                    continue;
+                }
+            }
+        }
+        if (s->picnum >= 870 && s->picnum <= 873) {
+            if (t[2]) {
+                gibrest(i, dist);
+                continue;
+            }
+            gibstep(i, sect, 870, 192, 0, 2048);
+        }
+        if (s->picnum >= 874 && s->picnum <= 877) {
+            if (t[2]) {
+                gibrest(i, dist);
+                continue;
+            }
+            gibstep(i, sect, 874, 128, 7, 2048);
+        }
+        if (s->picnum >= 878 && s->picnum <= 881) {
+            if (t[2]) {
+                gibrest(i, dist);
+                continue;
+            }
+            gibstep(i, sect, 878, 192, 7, 4096);
+        }
+        if (s->picnum == 174) {
+            int a;
+
+            if (t[0] == 0)
+                t[1] = (krand() & 3) + 1;
+            t[0]++;
+            s->xrepeat = s->xrepeat == 96 ? 191 : (unsigned char)(s->xrepeat - 48);
+            s->yrepeat -= 3;
+            if (t[0] == t[1])
+                for (a = 0; a < 2048; a += 768) {
+                    s->ang = (short)((unsigned char)randomstash + a);
+                    spawn(i, 1370);
+                }
+            if (t[0] > 3)
+                deletesprite(i);
+            continue;
+        }
+        if (s->picnum >= 235 && s->picnum <= 246) {
+            short old = s->picnum;
+
+            s->picnum = old == 238 ? 235 : old == 242 ? 239 : old == 246 ? 243 : (short)(old + 1);
+            if (abs(sector[sect].ceilingz - sector[sect].floorz) < 7680)
+                s->xvel = 64;
+            if (movealong(i, s->zvel, 1) == 0 && s->z < sector[sect].floorz) {
+                if ((s->zvel >> 2) < 1024)
+                    s->zvel += 128;
+                s->z += s->zvel;
+                if (s->xvel > 16)
+                    s->xvel -= 4;
+            } else if (++t[0] != 2) {
+                s->zvel = (short)-s->zvel;
+            } else {
+                deletesprite(i);
+            }
+        }
+    }
+}
+
+/* 0x24FB0. The first player standing in sector sect, or -1. */
+static short playerinsect(short sect)
+{
+    short p;
+
+    for (p = connecthead; p >= 0; p = connectpoint2[p])
+        if (ps[p].cursectnum == sect)
+            return p;
+    return -1;
+}
+
+static short findinsect(short sect, short pic)
+{
+    short j;
+
+    for (j = headspritesect[sect]; j >= 0; j = nextspritesect[j])
+        if (sprite[j].picnum == pic)
+            return j;
+    return -1;
+}
+
+/* The crane (1175..1178). t0 is its step, t1 the sector it fetches from,
+   t4 its three msx/msy slots: home x,y; pickup x,y; rope height and the
+   rope sprite. What it holds (owner, or -2 for a player) rides below it. */
+static void movecrane(short i)
+{
+    spritetype *s = &sprite[i];
+    int *t = hittype[i], d;
+    short sect = s->sectnum, p, j;
+
+    s->xrepeat = s->yrepeat = 64;
+    switch (t[0]) {
+    case 0:
+        if (playerinsect((short)t[1]) < 0) {
+            j = findinsect((short)t[1], 627);
+            if (j >= 0) {
+                s->ang = (short)getangle(msx[t[4] + 1] - s->x, msy[t[4] + 1] - s->y);
+                setsprite(j, msx[t[4] + 1], msy[t[4] + 1], sprite[j].z);
+                t[0]++;
+                return;
+            }
+        } else {
+            s->ang = (short)getangle(msx[t[4] + 1] - s->x, msy[t[4] + 1] - s->y);
+            t[0]++;
+        }
+        break;
+    case 1:
+        if (s->xvel < 184) {
+            s->picnum = 1176;
+            s->xvel += 8;
+        }
+        movealong(i, s->zvel, 0);
+        if (sect == t[1])
+            t[0]++;
+        break;
+    case 2:
+    case 7:
+        s->z += 1536;
+        if (t[0] == 2) {
+            if (sector[sect].floorz - s->z < 12288 && s->picnum > 1175)
+                s->picnum--;
+            if (sector[sect].floorz - s->z < 5120)
+                t[0]++;
+        }
+        if (t[0] == 7 && sector[sect].floorz - s->z < 5120) {
+            if (s->picnum > 1175)
+                s->picnum--;
+            else {
+                if (s->owner == -2) {
+                    p = findplayer(i, &d);
+                    if (ps[p].w82 == i)
+                        ps[p].w82 = -1;
+                }
+                t[0]++;
+                s->owner = -1;
+            }
+        }
+        break;
+    case 3:
+        if (++s->picnum != 1177)
+            break;
+        p = playerinsect((short)t[1]);
+        if (p >= 0 && ps[p].b8f) {
+            s->owner = -2;
+            ps[p].ang = (short)getangle(s->x - ps[p].posx, s->y - ps[p].posy);
+            ps[p].w82 = i;
+        } else {
+            j = findinsect((short)t[1], 627);
+            if (j >= 0)
+                s->owner = j;
+        }
+        t[2] = 0;
+        t[0]++;
+        return;
+    case 4:
+        if (++t[2] > 10)
+            t[0]++;
+        break;
+    case 5:
+    case 8:
+        if (t[0] == 8 && s->picnum < 1177 && sector[sect].floorz - s->z > 0x2000)
+            s->picnum++;
+        if (s->z >= msx[t[4] + 2])
+            s->z -= 1536;
+        else {
+            t[0]++;
+            s->xvel = 0;
+        }
+        break;
+    case 6:
+        if (s->xvel < 192)
+            s->xvel += 8;
+        s->ang = (short)getangle(msx[t[4]] - s->x, msy[t[4]] - s->y);
+        movealong(i, s->zvel, 0);
+        if ((s->y - msy[t[4]]) * (s->y - msy[t[4]]) + (s->x - msx[t[4]]) * (s->x - msx[t[4]]) < 0x4000)
+            t[0]++;
+        break;
+    case 9:
+        t[0] = 0;
+        break;
+    }
+    setsprite((short)msy[t[4] + 2], s->x, s->y, s->z - 8704);
+    if (s->owner == -1)
+        return;
+    p = findplayer(i, &d);
+    if (ifhitweapon(i) >= 0) {
+        if (s->owner == -2 && ps[p].w82 == i)
+            ps[p].w82 = -1;
+        s->owner = -1;
+        s->picnum = 1175;
+    }
+    if (s->owner == -2) {
+        playertype *pl = &ps[p];
+
+        if (pl->w82 == i && p == myconnectindex)
+            s->xrepeat = s->yrepeat = 0;
+        pl->posx = s->x - (sintable()[(pl->ang + 512) & 2047] >> 6);
+        pl->posy = s->y - (sintable()[pl->ang & 2047] >> 6);
+        pl->posz = s->z - 7168;
+        clipmove(&pl->posx, &pl->posy, &pl->posz, &pl->cursectnum, 0, 0, 192, 1024, 1024, 0);
+        setsprite(pl->i, pl->posx, pl->posy, pl->posz);
+    } else if (s->owner >= 0) {
+        setsprite(s->owner, s->x, s->y, s->z);
+    }
+}
+
+/* 0x3AB90. Standing things (stat 6). */
+void movestandables(void)
+{
+    short i, nexti, j;
+
+    for (i = headspritestat[6]; i >= 0; i = nexti) {
+        spritetype *s = &sprite[i];
+        int d;
+        short sect = s->sectnum, p;
+
+        nexti = nextspritestat[i];
+        if (s->picnum == 57) {
+            /* A force field post; one that dies sets every post of its hitag to
+               -32, and each of those then bursts. */
+            if (s->shade == -32) {
+                spawn(i, 1370);
+                s->z -= 0x2000;
+                shoot(i, 1210, 1);
+                s->z += 0x2000;
+                spawn(i, 1370);
+                spawn(i, 1370);
+                deletesprite(i);
+            } else if ((ifhitweapon(i) >= 0 && s->extra < 0) || s->shade == -31) {
+                for (j = headspritestat[6]; j >= 0; j = nextspritestat[j])
+                    if (s->hitag == sprite[j].hitag && sprite[j].picnum == 57)
+                        sprite[j].shade = -32;
+            }
+        } else if (s->picnum >= 1175 && s->picnum <= 1178) {
+            movecrane(i);
+        } else if (s->picnum == 1200) {
+            fallto(s);
+            j = ifhitweapon(i);
+            if (j >= 0) {
+                if (s->lotag)
+                    EGS(sect, s->x, s->y, s->z - 4096, 1, s->lotag, -16, 32, 32, 0, 0, -1536, sprite[j].owner, 1);
+                EGS(sect, s->x, s->y, s->z - 4096, 1, 1201, s->shade, 32, 32, sprite[j].ang, 128, -1024,
+                    sprite[j].owner, 5);
+                EGS(sect, s->x, s->y, s->z, 1, 1204, s->shade, 28, 32, sprite[j].ang - 512, 128, -1024,
+                    sprite[j].owner, 5);
+                EGS(sect, s->x, s->y, s->z, 1, 1205, s->shade, 28, 32, sprite[j].ang + 512, 128, -1024,
+                    sprite[j].owner, 5);
+                deletesprite(i);
+            }
+        } else {
+            p = findplayer(i, &d);
+            if (s->picnum == 627 || s->picnum == 905 || s->picnum == 974)
+                execute(i, p, d);
         }
     }
 }
