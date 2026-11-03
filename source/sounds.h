@@ -3,5 +3,8 @@
 
 void loadsounds(void);
 void sound_callback(unsigned long value);
+/* 0x3BE70 and 0x3C040. Playback is lifted with the sound task. */
+void spritesound(int num, short i);
+void stopsound(int num);
 
 #endif

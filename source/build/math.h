@@ -18,6 +18,7 @@ void initmath(void);
 int tablesqrt(int v);
 int ksqrt(int v);
 int krand(void);
+int wrand(void);
 int getangle(int xvect, int yvect);
 
 #endif

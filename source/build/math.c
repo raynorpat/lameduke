@@ -119,3 +119,12 @@ int getangle(int xvect, int yvect)
     }
     return (v + (neg << 10) + 2048) & 2047;
 }
+
+/* Watcom's rand(), which the game also calls. Nothing seeds it, so it starts at 1. */
+int wrand(void)
+{
+    static unsigned int seed = 1;
+
+    seed = seed * 1103515245u + 12345u;
+    return (int)((seed >> 16) & 0x7FFF);
+}

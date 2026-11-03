@@ -13,3 +13,16 @@ void sound_callback(unsigned long value)
 {
     (void)value;
 }
+
+/* 0x3BE70. The VOC playback this starts arrives with the sound task. */
+void spritesound(int num, short i)
+{
+    (void)num;
+    (void)i;
+}
+
+/* 0x3C040 */
+void stopsound(int num)
+{
+    (void)num;
+}

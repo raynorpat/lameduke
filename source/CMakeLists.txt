@@ -1,10 +1,12 @@
 add_executable(d3d
+  actors.c
   demo.c
   game.c
   global.c
   config.c
   gamedef.c
   menus.c
+  player.c
   premap.c
   sounds.c)
 
