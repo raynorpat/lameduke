@@ -8,6 +8,7 @@ add_executable(d3d
   menus.c
   player.c
   premap.c
+  sector.c
   sounds.c)
 
 target_include_directories(d3d PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

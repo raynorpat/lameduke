@@ -26,3 +26,13 @@ void stopsound(int num)
 {
     (void)num;
 }
+
+/* 0x3BCB0 */
+void soundxyz(int num, short i, int x, int y, int z)
+{
+    (void)num;
+    (void)i;
+    (void)x;
+    (void)y;
+    (void)z;
+}

@@ -13,7 +13,7 @@ short nextsectorneighborz(short sectnum, int thez, short topbottom, short direct
 
 short findplayer(short i, int *dist);
 void addweapon(short p, short weapon, int force);
-void shoot(short i, short atwith);
+void shoot(short i, short atwith, int mode);
 void processinput(short snum);
 
 #endif

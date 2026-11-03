@@ -5,6 +5,8 @@
 #include "actors.h"
 #include "sounds.h"
 #include "gamedef.h"
+#include "premap.h"
+#include "sector.h"
 
 #include "board.h"
 #include "math.h"
@@ -13,6 +15,7 @@
 #include "fx_man.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #define APLAYER 283
 
@@ -28,6 +31,27 @@ static const unsigned char kickframes[6][20] = { /* byte_82364, indexed by b91 *
 static int iabs(int v)
 {
     return v < 0 ? -v : v;
+}
+
+/* The help quotes at 0x1000 bytes into the strings, 32 bytes each. */
+const char fta_quotes[13][32] = {
+    "She's tougher than she looks!", "Go get the gun.", "The reactor must be destroyed!",
+    "Enemy ALERT!!!", "The door is unlocked...", "The door is locked...", "Cola increases health.",
+    "It's CRASHINGING!!!!!", "Shutting airlock bay doors.", "You found a secret room..!",
+    "Pintched by the doors!", "ALL DOORS UNLOCKED!!!", "Falling to your bloody death."
+};
+
+/* 0x12630. With /q on, starts help quote q for the local player:
+   w60[q] gets its display time and w7a remembers which quote it is. */
+void quote(short q)
+{
+    playertype *p = &ps[myconnectindex];
+    short *timer = &p->w60 + q;
+
+    if (game_quotes != 1 || q < 0 || q >= 13 || *timer != 0)
+        return;
+    *timer = (short)(4 * strlen(fta_quotes[q]));
+    p->w7a = q;
 }
 
 /* 0x25000. The nearest player by x+y distance. */
@@ -71,12 +95,31 @@ void addweapon(short p, short weapon, int force)
     ps[p].w7c = 0;
 }
 
-/* The shoot code processinput inlines once per weapon tile. */
-void shoot(short i, short atwith)
+/* 0x2F660. mode 1 steps a hitscan weapon sprite to what it hits (within 512)
+   instead of firing; processinput inlines mode 0 once per weapon tile. */
+void shoot(short i, short atwith, int mode)
 {
     int sx, sy, sz, zvel;
     short sa, sect;
 
+    if (mode) {
+        short hitsect, hitwall, hitspr;
+        int hx, hy, hz;
+        spritetype *s = &sprite[i];
+
+        hitscan(s->x, s->y, s->z, s->sectnum, sintable()[(s->ang + 512) & 2047], sintable()[s->ang & 2047], 0,
+            &hitsect, &hitwall, &hitspr, &hx, &hy, &hz);
+        if (ksqrt((s->y - hy) * (s->y - hy) + (s->x - hx) * (s->x - hx)) > 512)
+            return;
+        if (sector[s->sectnum].ceilingz + 2560 <= s->z || checkhitceiling(s->sectnum) == 0) {
+            setsprite(i, hx, hy, hz);
+            if (hitwall >= 0) {
+                checkhitswitch(hitwall);
+                checkhitwall(hitwall, hx, hy, hz, atwith);
+            }
+        }
+        return;
+    }
     if (sprite[i].picnum == APLAYER) {
         short p = sprite[i].yvel;
 
@@ -232,7 +275,7 @@ static void weapons(short snum)
     switch (p->w7e) {
     case 191:
         if (p->w7c == 1)
-            shoot(p->i, 191);
+            shoot(p->i, 191, 0);
         else if (p->w7c == 2)
             spawn(p->i, 1165);
         p->w7c++;
@@ -245,13 +288,13 @@ static void weapons(short snum)
         if (++p->w7c >= 6)
             p->w7c = 0;
         if (p->w7c == 3)
-            shoot(p->i, 389);
+            shoot(p->i, 389, 0);
         break;
     case 563:
         if (p->w52 > 0 && (syncbits[snum] & 4) && p->w7c == 10) {
             p->w7c = 11;
             p->w52--;
-            shoot(p->i, 563);
+            shoot(p->i, 563, 0);
             p->horiz += 64;
         }
         if (p->w7c <= 10) {
@@ -296,14 +339,14 @@ static void weapons(short snum)
         if (f < 4) {
             if (f == 3 && p->w7c == 4 && p->w4e && (syncbits[snum] & 4)
                 && (sector[p->cursectnum].lotag & 0x7FFF) != 2) {
-                shoot(p->i, 1230);
+                shoot(p->i, 1230, 0);
                 spritesound(24, p->i);
                 p->w4e--;
                 p->w7c--;
                 p->ba4++;
             }
         } else if (f == 4) {
-            shoot(p->i, 1230);
+            shoot(p->i, 1230, 0);
         } else if (f == 255) {
             p->w7c = 0;
         }
