@@ -11,3 +11,4 @@ CMakeUserPresets.json
 *.id2
 *.nam
 *.til
+.claude/settings.local.json

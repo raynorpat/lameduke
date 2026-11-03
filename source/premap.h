@@ -14,5 +14,8 @@ extern int game_level;
 extern int game_skill;
 extern int game_level_set;
 extern int game_demorec;
+/* /q (byte_1257A9) and /d (word_1257AD). Read by code lifted in later tasks. */
+extern int game_quotes;
+extern int game_debug;
 
 #endif
