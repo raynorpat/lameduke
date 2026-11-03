@@ -11,6 +11,11 @@
 #include "draw.h"
 #include "math.h"
 #include "tiles.h"
+#include "sounds.h"
+#include "premap.h"
+
+/* byte_82364. The knee's frame list, shared with the trigger in player.c. */
+extern const unsigned char kickframes[6][20];
 
 #define GOTPIC(p) (gotpic[(p) >> 3] & (1 << ((p) & 7)))
 
@@ -165,6 +170,234 @@ static void animatesprites(int viewang)
     }
 }
 
+/* 0x126C0. A HUD tile, drawn only in the 3D view, paletted by the floor
+   under the local player or by that player's own palette. */
+static void overlaypal(int x, int y, int pic, int shade, int flags)
+{
+    playertype *me = &ps[myconnectindex];
+    int pal;
+
+    if (me->f02 != 3)
+        return;
+    pal = sector[me->cursectnum].floorpal;
+    if (pal == 0)
+        pal = me->ba7;
+    rotatesprite(x, y, (short)pic, (signed char)shade, (unsigned char)flags, (unsigned char)pal);
+}
+
+/* 0x2F280, eleven words. Frame ba3 (1..11) draws 681 plus the word before it. */
+static const short raiseframes[11] = { 0, 1, 2, 2, 3, 3, 3, 2, 2, 1, 0 };
+
+/* 0x2FD20. The weapon coming up at the start of a level. 1 when it drew. */
+static int displayraise(short p, int shade)
+{
+    playertype *pl = &ps[p];
+    int bob;
+
+    if (pl->ba3 == 0 || pl->w54 <= 0)
+        return 0;
+    bob = pl->lookang < 0 ? -pl->lookang : pl->lookang;
+    bob /= 9;
+    /* ba3 runs 1..11. Past that the raise is over and weapons() has cleared it. */
+    if (pl->ba3 > 11)
+        return 1;
+    overlaypal((syncavel[p] >> 4) + 160 - (pl->lookang >> 1), bob + 180 - (pl->horiz >> 4),
+        raiseframes[pl->ba3 - 1] + 681, shade, 3);
+    if (pl->ba3 == 5)
+        spritesound(7, pl->i);
+    return 1;
+}
+
+/* How far the knee pulls back, from the frame byte at 0x3003D. */
+static int kneepull(int frame)
+{
+    switch (frame) {
+    case 2: return 10;
+    case 3: return 20;
+    case 4: return 30;
+    case 5:
+    case 6: return 40;
+    case 7: return 60;
+    case 8: return 80;
+    case 9: return 100;
+    case 10: return 130;
+    default: return 0;
+    }
+}
+
+/* 0x2FE40. The weapon in front of the view. Tile numbers are the ones the
+   executable compares: 191, 389, 563, 721, 1140, 1230. */
+static void displayweapon(short p)
+{
+    playertype *pl = &ps[p];
+    int shade, bob, gunz, yb, sway, xbase, weapon, frame, aim, hz;
+
+    if (pl->w54 <= 0)
+        return;
+    visibility = user_visibility;
+    bob = pl->lookang < 0 ? -pl->lookang : pl->lookang;
+    bob /= 9;
+    shade = sector[pl->cursectnum].floorshade;
+    if (shade < 0)
+        shade = 0;
+    else if (shade > 24)
+        shade = 24;
+    if (displayraise(p, shade))
+        return;
+    gunz = pl->ba1 & 0x7F;
+    if (gunz < 2)
+        return;
+    /* (gunz << 4) - 32 is a byte, then the bob sine comes off, and the low
+       byte is what every y below subtracts (0x2FF48). */
+    yb = (unsigned char)((gunz << 4) - 32);
+    yb = (yb - (sintable()[pl->f3a & 2047] >> 12)) & 255;
+    sway = (syncbits[p] & 0x20) ? syncavel[p] >> 3 : 0;
+    xbase = sway + 12 + 16 * (6 - gunz);
+    weapon = (unsigned short)(pl->w5e >= 0 ? pl->w5e : pl->w7e);
+    frame = pl->w7c;
+    aim = pl->lookang >> 1;
+    hz = pl->horiz >> 4;
+
+    if (weapon == 1230) {
+        int pull = kneepull(kickframes[pl->b91][frame]);
+        int x = xbase - pull;
+        int pic;
+
+        if (frame != 0) {
+            pic = kickframes[pl->b91][frame] + 1230;
+            overlaypal((syncavel[p] >> 4) + x + 180 - aim, bob + 280 - yb - hz, pic, shade, 3);
+            if (kickframes[pl->b91][frame] == 2) {
+                if (pl->w4e == 0 || (sector[pl->cursectnum].lotag & 0x7FFF) == 2)
+                    pic = 1239;
+                else
+                    pic = 1240 + (pl->ba4 % 3);
+                overlaypal((syncavel[p] >> 4) + x + 229 - aim, bob + 207 - yb - hz, pic, shade, 3);
+            }
+        } else {
+            overlaypal((syncavel[p] >> 4) + x + 180 - aim, bob + 280 - yb - hz, 1231, shade, 3);
+        }
+        return;
+    }
+    if (weapon == 563) {
+        /* 0x2F296, nine bytes, read at w7c - 11 (0x30398). */
+        static const unsigned char recoil[9] = { 40, 30, 22, 16, 12, 16, 22, 30, 30 };
+        int xb;
+
+        if (frame > 11) {
+            int s = shade;
+
+            if (frame <= 13)
+                s = frame - 12;
+            overlaypal((syncavel[p] >> 5) + xbase - recoil[frame - 11] + 270, 2 * bob + 186 - yb - hz, 1252, s, 3);
+        } else {
+            int ang = frame << 7;
+
+            xb = xbase + (sintable()[(1024 - ang) & 2047] >> 9);
+            yb = (yb + (sintable()[(1536 - ang) & 2047] >> 10)) & 255;
+            if (frame < 4)
+                overlaypal((syncavel[p] >> 5) + xb + 150, 2 * bob + 224 - yb - hz, 1250, shade, 3);
+            else if (frame < 7)
+                overlaypal((syncavel[p] >> 5) + xb + 184, 2 * bob + 180 - yb - hz, 1251, shade, 3);
+            else
+                overlaypal((syncavel[p] >> 5) + xb + 260, 2 * bob + 196 - yb - hz, 1252, shade, 3);
+        }
+        return;
+    }
+    if (weapon == 1140) {
+        /* 0x2F2C9, eleven bytes. w7c 0 is tile 1140 itself. */
+        static const unsigned char frames1140[11] = { 0, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0 };
+        int pic = 1140;
+
+        xbase = -32;
+        if (frame > 4)
+            yb = (yb - 12 * (frame - 4)) & 255;
+        if (frame > 0 && frame < 11)
+            pic = frames1140[frame] + 1140;
+        overlaypal((syncavel[p] >> 4) + xbase + 150 - aim, bob + 258 - yb - hz, pic, shade, 3);
+        return;
+    }
+    if (weapon == 721) {
+        /* 0x2F2B4, twenty-one bytes copied onto the stack. */
+        static const unsigned char frames721[21] = {
+            0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3
+        };
+        int pic = 1143;
+
+        if (frame != 0) {
+            if (frame < 7)
+                yb = (yb - 10 * frame) & 255;
+            else if (frame < 12)
+                yb = (yb + 20 * (frame - 10)) & 255;
+            else if (frame < 20)
+                yb = (yb - 9 * (frame - 14)) & 255;
+            if (frame > 0 && frame < 21)
+                pic = frames721[frame] + 1143;
+        }
+        overlaypal((syncavel[p] >> 4) + xbase + 190 - aim,
+            bob + (frame == 0 ? 260 : 250) - yb - hz, pic, shade, 3);
+        return;
+    }
+    if (weapon == 389) {
+        int x = (syncavel[p] >> 4) + xbase + 160 - aim;
+        int y = bob + 240 - yb - hz;
+
+        if (frame == 0)
+            overlaypal(x, y, 882, shade, 3);
+        if (frame == 4)
+            shade = 0;
+        if (frame == 5)
+            visibility++;
+        if (frame != 0 && frame != 6)
+            overlaypal(x, y, frame + 881, shade, 3);
+        return;
+    }
+    if (weapon != 191 || frame >= 27)
+        return;
+    /* 0x2F2AA: five words added to 1150 while the pistol is at rest or firing. */
+    if (frame < 5) {
+        static const short pistol[5] = { 0, 1, 2, 0, 0 };
+        int x = 195 + 16 * (6 - gunz);
+
+        if (frame == 1)
+            shade = 0;
+        if (frame == 2) {
+            shade = 4;
+            x -= 3;
+        }
+        overlaypal((syncavel[p] >> 3) + x - aim, bob + 240 - yb - hz, pistol[frame] + 1150, shade, 3);
+        return;
+    }
+    if (frame < 10) {
+        overlaypal((syncavel[p] >> 3) + 190 - aim, bob + 230 - yb - hz, 1160, shade, 3);
+        return;
+    }
+    if (frame < 15) {
+        if (frame == 10)
+            spritesound(34, pl->i);
+        if (frame == 13)
+            spritesound(33, pl->i);
+        overlaypal((syncavel[p] >> 3) + 240 - 8 * frame - aim, bob + 130 + 16 * frame - yb - hz, 1162, shade, 3);
+        overlaypal((syncavel[p] >> 3) + 220 - aim, bob + 220 - yb - hz, 1161, shade, 3);
+        return;
+    }
+    if (frame < 20) {
+        overlaypal((syncavel[p] >> 3) + 120 + 2 * frame - aim, bob + 430 - yb - hz - 8 * frame, 1163, shade, 3);
+        overlaypal((syncavel[p] >> 3) + 220 - aim, bob + 220 - yb - hz, 1161, shade, 3);
+        return;
+    }
+    if (frame < 23) {
+        overlaypal((syncavel[p] >> 3) + 180 - aim, bob + 235 - yb - hz, 1164, shade, 3);
+        overlaypal((syncavel[p] >> 3) + 220 - aim, bob + 210 - yb - hz, 1161, shade, 3);
+        return;
+    }
+    if (frame < 25) {
+        overlaypal((syncavel[p] >> 3) + 160 - aim, bob + 245 - yb - hz, 1164, shade, 3);
+        overlaypal((syncavel[p] >> 3) + 220 - aim, bob + 220 - yb - hz, 1161, shade, 3);
+        return;
+    }
+    overlaypal((syncavel[p] >> 3) + 190 - aim, bob + 235 - yb - hz, 1160, shade, 3);
+}
+
 /* 0x14050. Draws player p's view, or the demo camera's. */
 void displayrooms(short p)
 {
@@ -190,4 +423,8 @@ void displayrooms(short p)
     }
     drawmasks();
     /* pending: the tile 572 floor reflection over rows 99..199 */
+    /* The exe draws the weapon after this view, unless a camera or the
+       w56 view is up (that one is 0x1A420, still to lift). */
+    if (cameraspr < 0 && pl->w56 < 0)
+        displayweapon(p);
 }
