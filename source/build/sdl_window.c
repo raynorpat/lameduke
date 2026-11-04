@@ -2,6 +2,7 @@
 #include "display.h"
 
 #include <SDL.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,6 +14,7 @@ static int rgb_bytes;
 static int tex_w;
 static int tex_h;
 static const char *video_error;
+static char title[96] = "Duke Nukem 3D";
 
 static void destroy_texture(void)
 {
@@ -45,7 +47,7 @@ int platform_video(int width, int height)
     if (window)
         SDL_SetWindowSize(window, window_w, window_h);
     else {
-        window = SDL_CreateWindow("Duke Nukem 3D",
+        window = SDL_CreateWindow(title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             window_w, window_h, SDL_WINDOW_SHOWN);
         if (!window) {
@@ -123,4 +125,17 @@ void platform_shutdown(void)
         window = NULL;
     }
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+/* The window's title bar; kept for the window if it is not made yet. */
+void platform_title(const char *text)
+{
+    snprintf(title, sizeof title, "%s", text);
+    if (window)
+        SDL_SetWindowTitle(window, title);
+}
+
+const char *platform_title_text(void)
+{
+    return window ? SDL_GetWindowTitle(window) : title;
 }

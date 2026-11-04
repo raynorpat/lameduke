@@ -2043,10 +2043,23 @@ A candidate must contain the sprite XY and pass the sprite-height Z tests.
 static int32_t loadedx[MAXSPRITES], loadedy[MAXSPRITES];
 static short loadedsect[MAXSPRITES];
 
+/* LameDuke: the title bar names the map being edited. */
+static void showtitle(int named)
+{
+	char buf[64];
+
+	if (named)
+		snprintf(buf,sizeof(buf),"BUILD Editor - %s",boardfilename);
+	else
+		strcpy(buf,"BUILD Editor");
+	platform_title(buf);
+}
+
 static int editorloadboard(const char *filename)
 {
 	int r = loadboard(filename), i;
 
+	showtitle(r == 0);
 	for(i=0;i<MAXSPRITES;i++)
 	{
 		loadedsect[i] = (sprite[i].statnum < MAXSTATUS) ? sprite[i].sectnum : -1;
@@ -4585,6 +4598,7 @@ void overheadeditor(void)
 							cursectnum = -1;
 							initspritelists();
 							strcpy(boardfilename,"newboard.map");
+							showtitle(0);
                             asksave = 0;  /* rcg09032000 my add. */
 							break;
 						}
@@ -4821,6 +4835,7 @@ void overheadeditor(void)
 						fixspritesectors();   /* Do this before saving! */
 						writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
 						ExtSaveMap(boardfilename);
+						showtitle(1);
 						printmessage16("Board saved.");
                         asksave = 0;  /* rcg09032000 my add. */
 					}

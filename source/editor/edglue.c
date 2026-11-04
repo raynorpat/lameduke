@@ -62,6 +62,7 @@ void editor_nextpage(void)
     nextpage();
     shown++;
     if (name && shown >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
+        printf("title: %s\n", platform_title_text());
         write_frame(name);
         exit(0);
     }
