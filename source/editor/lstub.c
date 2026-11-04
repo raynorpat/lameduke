@@ -218,6 +218,16 @@ void ExtAnalyzeSprites(void) {}
 /* Once a frame in both modes; build.c's 3D keys are editinput. */
 void ExtCheckKeys(void)
 {
-    if (!ydim16)
-        editinput();
+    if (ydim16)
+        return;
+    editinput();
+    /* the heightmap tool's state for the floor under the cursor */
+    if (searchstat == 2 && (sector[searchsector].floorstat & 2)) {
+        short t = sector[searchsector].floorheinum;
+
+        /* draw.c reads the heights as a 64x64 grid */
+        snprintf(caption, sizeof caption, "Heightmap: height tile %d%s ([ off, ] pick)", t,
+            (t >= 0 && t < MAXTILES && tilesizx[t] == 64 && tilesizy[t] == 64) ? "" : " NOT 64x64");
+        printmessage256(caption);
+    }
 }

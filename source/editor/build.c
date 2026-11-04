@@ -5878,7 +5878,26 @@ void editinput(void)
 			keystatus[0x2f] = 0;
 		}
 
-		/* [ and ]: 1996's slope keys; heinum is a heightmap tile in v5 (Task 6) */
+		/* [ and ], 1996's slope keys: the v5 floor heightmap. floorstat bit 2
+		   draws the floor from the height tile numbered in floorheinum. */
+		if (keystatus[0x1a])  /* [ */
+		{
+			keystatus[0x1a] = 0;
+			if (searchstat == 2)
+			{
+				sector[searchsector].floorstat ^= 2;
+				asksave = 1;
+			}
+		}
+		if (keystatus[0x1b])  /* ] */
+		{
+			keystatus[0x1b] = 0;
+			if (searchstat == 2)
+			{
+				sector[searchsector].floorheinum = (short)gettile(sector[searchsector].floorheinum);
+				asksave = 1;
+			}
+		}
 
 		smooshyalign = keystatus[0x4c];
 		repeatpanalign = (keystatus[0x2a]|keystatus[0x36]);
