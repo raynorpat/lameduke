@@ -160,29 +160,29 @@ The unchecked steps below retain the original verification detail; completion wa
 - [x] **Step 4: Stall test.** Add a temporary 2-second `SDL_Delay` at sample 100 and run the trace again. It matches `ref/demo1.trace` exactly. Remove the delay.
 - [x] **Step 5: Commit:** `game: play the attract demos through the full simulation`
 
-### Task 7: Sound effects
+### Task 7: Sound effects — complete
 
 **Files:** `source/audiolib/multivoc.c`, `mv_mix.c`, `fx_man.c`, `dsl.c`, `blaster.c` (the card branch the shipped setup selects), `source/sounds.c`
 
 **Interfaces:**
 - Produces: `MV_Mix` fills SDL's buffer through an `SDL_AudioSpec.callback` in `dsl.c`, at 11000 Hz, 16-bit, 2 channels (spec). `loadsounds()` loads the executable's VOC list. `sound_callback` does what `0x3C190` does. Sound play calls are whatever the executable calls `FX_*`. Lift them under their AudioLib names.
 
-- [ ] **Step 1: In IDA,** read `0x3BBD0` (loadsounds), the VOC table, the play sites, and the multivoc mixer and VOC block parser.
-- [ ] **Step 2: Implement.** A VOC the executable lists but the release does not ship (`waterfal.voc`, `switch.voc`, `subway.voc`, `bodybloa.voc`, `xoptor.voc`) is handled as `0x3BBD0` handles a failed open.
-- [ ] **Step 3: Verify.** In `/v1 /l1`, firing plays `shooting.voc` and doors play `door1.voc`/`door2.voc`, matching DOSBox by ear. With `SDL_AUDIODRIVER=dummy`, and again with the audio device disabled, the game runs silent and does not `errorexit` (Review Focus 3). Setting `SETUP.DAT` byte 1 to 0 skips sound init the way the executable does.
-- [ ] **Step 4: Commit:** `audio: mix VOC effects through SDL`
+- [x] **Step 1: In IDA,** read `0x3BBD0` (loadsounds), the VOC table, the play sites, and the multivoc mixer and VOC block parser.
+- [x] **Step 2: Implement.** A VOC the executable lists but the release does not ship (`waterfal.voc`, `switch.voc`, `subway.voc`, `bodybloa.voc`, `xoptor.voc`) is handled as `0x3BBD0` handles a failed open.
+- [x] **Step 3: Verify.** In `/v1 /l1`, firing plays `shooting.voc` and doors play `door1.voc`/`door2.voc`, matching DOSBox by ear. With `SDL_AUDIODRIVER=dummy`, and again with the audio device disabled, the game runs silent and does not `errorexit` (Review Focus 3). Setting `SETUP.DAT` byte 1 to 0 skips sound init the way the executable does.
+- [x] **Step 4: Commit:** `audio: mix VOC effects through SDL`
 
-### Task 8: Music
+### Task 8: Music — complete
 
 **Files:** `source/audiolib/music.c`, `al_midi.c`, `oplemu.c`, `midi.c`, plus `mpu401.c`/`gusmidi.c` only to keep their branch calls compiling. `source/sounds.c` or `game.c` for the `MUSIC.CON` song selection.
 
 **Interfaces:**
 - Produces: `MUSIC_PlaySong`, `MUSIC_StopSong`, and the other `MUSIC_*` calls the executable makes, under AudioLib names. MIDI is rendered in process (OPL emulation for the AdLib/SoundBlaster branch that the shipped setup selects) and mixed into the same SDL callback as Task 7.
 
-- [ ] **Step 1: In IDA,** map the song selection (`MUSIC.CON`, when a song starts or stops) and the AL_MIDI and OPL path.
-- [ ] **Step 2: Implement** OPL emulation in `oplemu.c` from the OPL2 register behavior. If an existing permissively licensed OPL core is brought in instead, ask the owner first.
-- [ ] **Step 3: Verify.** In the attract loop and in `/v1 /l1`, the song DOSBox plays starts at the same moment and sounds like it. Music Volume changes the level. `SETUP.DAT` byte 2 = 0 skips music init.
-- [ ] **Step 4: Commit:** `audio: play MID songs through OPL emulation`
+- [x] **Step 1: In IDA,** map the song selection (`MUSIC.CON`, when a song starts or stops) and the AL_MIDI and OPL path.
+- [x] **Step 2: Implement** OPL emulation in `oplemu.c` from the OPL2 register behavior. If an existing permissively licensed OPL core is brought in instead, ask the owner first.
+- [x] **Step 3: Verify.** In the attract loop and in `/v1 /l1`, the song DOSBox plays starts at the same moment and sounds like it. Music Volume changes the level. `SETUP.DAT` byte 2 = 0 skips music init.
+- [x] **Step 4: Commit:** `audio: play MID songs through OPL emulation`
 
 ### Task 9: Menus, save/restore, high scores
 
