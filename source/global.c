@@ -1,7 +1,7 @@
 #include "global.h"
 
-int sound_volume;   /* word_1257AF */
-int music_volume;   /* word_1257B1 */
+int sound_volume = 255; /* word_1257AF, from userdefs.tmp (255 without one) */
+int music_volume = 255; /* word_1257B1, from userdefs.tmp (255 without one) */
 
 playertype ps[MAXPLAYERS];
 signed char syncfvel[MAXPLAYERS], syncsvel[MAXPLAYERS], syncavel[MAXPLAYERS];

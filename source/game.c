@@ -101,6 +101,7 @@ static void present(void)
 
     if (sintable() && palookup[0])
         displayrooms(screenpeek);
+    pansounds();
     platform_present(framebuffer(), xdim, ydim);
     presented++;
     /* Debug aid: dump the Nth frame (default 1), then exit. */
@@ -257,7 +258,7 @@ int main(int argc, char **argv)
         if (FX_SetupCard(card, &device) != 0)
             errorexit(FX_ErrorString(-1));
         loadsounds();
-        if (FX_Init(card, device.MaxVoices, 2, 16, 11000) != 0)
+        if (FX_Init(card, 4, 2, 16, 11000) != 0)
             errorexit(FX_ErrorString(-1));
         FX_SetCallBack(sound_callback);
         FX_SetVolume(sound_volume);
