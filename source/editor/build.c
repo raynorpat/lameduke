@@ -3772,6 +3772,7 @@ void overheadeditor(void)
 
                         clearbufbyte((void *) ((intptr_t)(&wall[newnumwalls])),sizeof(walltype),0L);
 				wall[newnumwalls].extra = -1;
+				wall[newnumwalls].nextsector2 = wall[newnumwalls].nextwall2 = -1;  /* v5: no second link */
 
 				wall[newnumwalls].x = mousxplc;
 				wall[newnumwalls].y = mousyplc;
@@ -3845,6 +3846,7 @@ void overheadeditor(void)
 						{
                                                 clearbufbyte((void *) ((intptr_t)(&wall[newnumwalls])),sizeof(walltype),0L);
 							wall[newnumwalls].extra = -1;
+							wall[newnumwalls].nextsector2 = wall[newnumwalls].nextwall2 = -1;  /* v5: no second link */
 
 							wall[newnumwalls].x = mousxplc;
 							wall[newnumwalls].y = mousyplc;

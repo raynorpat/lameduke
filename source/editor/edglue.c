@@ -3,7 +3,9 @@
    LAMEDUKE_FRAME=file and LAMEDUKE_FRAME_AT=n write the nth shown frame
    (a PPM) and exit; LAMEDUKE_KEYS=step:scancode,... presses each key at
    that _idle step (nextpage and every waiting loop take one); build.c
-   releases what it handles, and step:~scancode releases a held key. */
+   releases what it handles, step:~scancode releases a held key, step:@x/y
+   puts the cursor at (x,y), step:px/y centres the view on map (x,y) and
+   step:bN sets the mouse buttons (1 left). */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +13,7 @@
 #include "editor.h"
 
 static uint32_t lasttick;
+static int scriptbuttons; /* LAMEDUKE_KEYS step:b1 / step:b0 */
 static int tickrem;
 static int shown;
 
@@ -45,9 +48,21 @@ static void scriptkeys(void)
 
         if (!c)
             break;
-        sc = (int)strtol(c + 1 + (c[1] == '~'), NULL, 16) & 0xFF;
-        if (f == steps)
+        if (f == steps && c[1] == 'b') {
+            scriptbuttons = atoi(c + 2);
+        } else if (f == steps && (c[1] == '@' || c[1] == 'p')) {
+            /* @x/y puts the cursor there, px/y the view's centre */
+            const char *slash = strchr(c, '/');
+            int x = atoi(c + 2), y = slash ? atoi(slash + 1) : 0;
+
+            if (c[1] == '@')
+                searchx = x, searchy = y;
+            else
+                posx = x, posy = y;
+        } else if (f == steps) {
+            sc = (int)strtol(c + 1 + (c[1] == '~'), NULL, 16) & 0xFF;
             keystatus[sc] = c[1] != '~';
+        }
         k = strchr(c, ',');
         if (k)
             k++;
@@ -121,7 +136,7 @@ void editor_getmousevalues(short *mousx, short *mousy, short *bstatus)
     getmousevalues(&x, &y, &b);
     *mousx = (short)x;
     *mousy = (short)y;
-    *bstatus = (short)b;
+    *bstatus = (short)(b | scriptbuttons);
 }
 
 /* Mouse counts to screen pixels, keeping what is under a pixel. */
