@@ -910,15 +910,16 @@ void hitscan(int xs, int ys, int zs, short sectnum, int vx, int vy, int vz,
             if (lintersect(xs, ys, zs, x2, y2, z2, x1, y1, wx2, wy2, &intx, &inty, &intz, 1) != 1)
                 continue;
             ns = wal->nextsector;
-            if (!(vz == 0 || (intz > sector[dasector].ceilingz && intz < sector[dasector].floorz))) {
-                if (*hitsect == -1 || manhattan(intx, inty, xs, ys) < manhattan(*hitx, *hity, xs, ys)) {
-                    *hitsect = dasector;
-                    *hitwall = -1;
-                    *hitsprite = -1;
-                    *hitz = vz <= 0 ? sector[dasector].ceilingz : sector[dasector].floorz;
-                    *hitx = (int)((long long)vx * (*hitz - zs) / vz) + xs;
-                    *hity = (int)((long long)vy * (*hitz - zs) / vz) + ys;
-                }
+            /* A farther floor or ceiling crossing falls through to the wall tests. */
+            if (!(vz == 0 || (intz > sector[dasector].ceilingz && intz < sector[dasector].floorz))
+                && (*hitsect == -1 || manhattan(intx, inty, xs, ys) < manhattan(*hitx, *hity, xs, ys))) {
+                *hitsect = dasector;
+                *hitwall = -1;
+                *hitsprite = -1;
+                *hitz = vz <= 0 ? sector[dasector].ceilingz : sector[dasector].floorz;
+                /* the exe multiplies in 32 bits before dividing */
+                *hitx = imul32(vx, *hitz - zs) / vz + xs;
+                *hity = imul32(vy, *hitz - zs) / vz + ys;
                 continue;
             }
             if (ns == -1 || (wal->cstat & 0x40)
