@@ -154,8 +154,10 @@ int MV_KillAllVoices(void)
         MV_ErrorCode = 2;
         return -1;
     }
+    DSL_Lock();
     while (active_head)
         MV_Kill(active_head->handle);
+    DSL_Unlock();
     return 0;
 }
 

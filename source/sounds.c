@@ -4,6 +4,7 @@
 #include "board.h"
 #include "cache1d.h"
 #include "engine.h"
+#include "dsl.h"
 #include "fx_man.h"
 #include "math.h"
 #include "music.h"
@@ -103,12 +104,14 @@ void soundxyz(int num, short i, int x, int y, int z)
     /* The exe plays whatever is at address 0 for a sound that did not load. */
     if (!sounds[num])
         return;
+    DSL_Lock();
     handle = FX_PlayVOC3D(sounds[num], 0, ang >> 4, dist >> 6, num == 32 ? 255 : 0, (unsigned long)num);
-    if (handle <= 0)
-        return;
-    soundinfo[num].owner = i == -1 ? ps[0].i : i;
-    soundinfo[num].handle = handle;
-    soundinfo[num].playing++;
+    if (handle > 0) {
+        soundinfo[num].owner = i == -1 ? ps[0].i : i;
+        soundinfo[num].handle = handle;
+        soundinfo[num].playing++;
+    }
+    DSL_Unlock();
 }
 
 void spritesound(int num, short i)
@@ -119,9 +122,11 @@ void spritesound(int num, short i)
 /* 0x3C040 */
 void stopsound(int num)
 {
+    DSL_Lock();
     FX_StopSound(soundinfo[num].handle);
     if (soundinfo[num].playing)
         soundinfo[num].playing--;
+    DSL_Unlock();
 }
 
 /* 0x3C090, once a drawn frame: every playing sound follows its owner. */
