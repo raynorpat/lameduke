@@ -197,6 +197,10 @@ static int play_demo(const demo_t *demo)
                 ps[0].cursectnum);
         if (tics == 0)
             continue;
+        /* 0x15EDC: after a frame's samples the exe stops once it reaches count - 1,
+           and zero-tic samples always run on into the next one. */
+        if (i + 1 >= demo->count - 1)
+            break;
         present();
         if (shot && shot[0])
             continue;
