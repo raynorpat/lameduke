@@ -11,6 +11,7 @@ int loadlookup(void);
 int loadpalette(void);
 void setbrightness(int level);
 void setmapmode(void);
+void qsetmode640480(void);
 void screencapture(void);
 extern unsigned char palette[768];
 extern unsigned char *palookup[256];

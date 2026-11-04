@@ -987,7 +987,7 @@ void drawview(short p)
     playertype *pl = &ps[p];
 
     if (pl->f02 == 2) {
-        draw2dscreen(pl->posx, pl->posy, (short)(pl->ang + pl->lookang), pl->f06, show2dsprite);
+        draw2dscreen(pl->posx, pl->posy, (short)(pl->ang + pl->lookang), pl->f06, 0);
         return;
     }
     /* 0x160BD: a resize or map key repaints the border with tile 1170 */

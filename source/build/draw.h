@@ -16,7 +16,24 @@ void drawmasks(void);
 extern int totalclock;
 void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char flags, unsigned char pal);
 void rotatescalesprite(int sx, int sy, int z, short a, short picnum);
-void draw2dscreen(int x, int y, short ang, int zoom, const unsigned char *spriteshown);
+void draw2dscreen(int x, int y, short ang, int zoom, short gride);
+
+/* The 2D screen (640 wide, ydim16 rows above the status bar) and the
+   editor's search pick: with searchit 2, drawrooms/drawmasks record in
+   searchsector/searchwall/searchstat (0 wall, 1 ceiling, 2 floor,
+   3 sprite, 4 masked wall) what lies at (searchx, searchy). */
+extern short editstatus, searchit;
+extern int searchx, searchy;
+extern short searchsector, searchwall, searchstat;
+extern short linehighlight, pointhighlight, highlightcnt;
+extern int ydim16, numframes;
+void clear2dscreen(void);
+void draw2dgrid(int x, int y, short ang, int zoom, short gride);
+void drawline16(int x1, int y1, int x2, int y2, int col);
+void printext16(int xpos, int ypos, short col, short backcol, const char *name, char fontsize);
+void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize);
+void plotpixel(int x, int y, char col);
+void nextpage(void);
 
 void draw_init(void);
 const unsigned char *framebuffer(void);

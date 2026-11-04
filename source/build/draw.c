@@ -9,6 +9,7 @@
 #include "engine.h"
 #include "math.h"
 #include "tiles.h"
+#include "sdl_window.h"
 
 #include <string.h>
 
@@ -17,6 +18,15 @@
 #define MAXWALLSB 4096 /* the exe; wall sprites use slot 4095 */
 
 static unsigned char frame[MAXXDIM * MAXYDIM];
+
+/* Editor state the exe's engine shares with the 1994 BUILD. */
+short editstatus;                                     /* word_82CEB */
+short searchit;                                       /* word_23DE46 */
+int searchx, searchy;                                 /* dword_23C310, dword_23C314 */
+short searchsector, searchwall, searchstat;           /* word_23DE4A, word_23DE4C, word_23DE48 */
+short linehighlight = -1, pointhighlight = -1;        /* word_23DE64, word_23DE66 */
+short highlightcnt;                                   /* word_23DE60 */
+int ydim16;                                           /* dword_23C354, 0 outside the 2D modes */
 
 /* View state (0x23C3A4..0x23C3F8, 0x23DE6E). */
 static int globalposx, globalposy, globalposz, globalhoriz, globalhorizraw;
@@ -1285,6 +1295,65 @@ static void wallxcoords(int z, int xrep)
         lwall[xb1[z]] = 0;
 }
 
+/* The editor's pick (0x44DA6): with searchit 2, the first wall column under
+   searchx says what lies at searchy: the ceiling above uwall, the floor below
+   dwall, a solid wall, the upper or lower part of a two-sided wall (the
+   lower one names nextwall when cstat bit 1 swaps it), or a masked wall. */
+static void pickwall(int z, short w, short sectnum, short ns)
+{
+    sectortype *sec = &sector[sectnum];
+    int x = searchx;
+
+    searchsector = sectnum;
+    searchwall = w;
+    if (searchy <= uwall[x]) {
+        searchstat = 1;
+        searchit = 1;
+        return;
+    }
+    if (searchy >= dwall[x]) {
+        searchstat = 2;
+        searchit = 1;
+        return;
+    }
+    if (ns == -1) {
+        searchstat = 0;
+        searchit = 1;
+        return;
+    }
+    if (sector[ns].ceilingz > sec->ceilingz
+        && (int)(((long long)swall[x] * (sector[ns].ceilingz - globalposz)) >> 24) + globalhoriz >= searchy) {
+        searchstat = 0;
+        searchit = 1;
+    }
+    if (sector[ns].floorz < sec->floorz
+        && (int)(((long long)swall[x] * (sector[ns].floorz - globalposz)) >> 24) + globalhoriz <= searchy) {
+        if (wall[w].cstat & 2)
+            searchwall = wall[w].nextwall;
+        searchstat = 0;
+        searchit = 1;
+        return;
+    }
+    if (searchit == 2 && (wall[w].cstat & 0x20)) {
+        searchwall = w;
+        searchstat = 4;
+        searchit = 1;
+    }
+    (void)z;
+}
+
+/* A sprite or masked wall drawn later covers what the walls found. */
+static void picksprite(int x1, int x2, const int *top, const int *bot, int lastrow, short sect, short what, short stat)
+{
+    if (searchit >= 1 && searchx >= x1 && searchx <= x2 && searchy >= top[searchx]
+        && (lastrow ? searchy <= bot[searchx] : searchy < bot[searchx])) {
+        searchsector = sect;
+        searchwall = what;
+        searchstat = stat;
+        searchit = 1;
+    }
+}
+
 /* 0x4493D. Ceilings, floors and sky of one bunch, plus the per-column wall
    arrays (lwall, swall, uwall, dwall) that drawwalls then uses. */
 static void drawalls(int bunch)
@@ -1337,6 +1406,8 @@ static void drawalls(int bunch)
                 v += izinc;
             }
         }
+        if (searchit == 2 && searchx >= xb1[z] && searchx <= xb2[z])
+            pickwall(z, w, sectnum, ns);
         z = p2[z];
         if (z == -1)
             break;
@@ -1610,6 +1681,10 @@ static void drawmaskwall(short damaskwallcnt)
             break;
         }
     }
+    /* 0x4C9BC */
+    if (searchit >= 1 && searchx >= xb1[z] && searchx <= xb2[z] && searchy >= umost[searchx]
+        && searchy <= dmost[searchx])
+        picksprite(xb1[z], xb2[z], uwall2, dwall2, 1, thesector[z], w, 4);
     if (globalorientation & 0x80) {
         for (x = xb1[z]; umost[x] > dmost[x] && x <= xb2[z]; x++)
             ;
@@ -2009,6 +2084,7 @@ static void drawfloorsprite(int depth, short tilenum, short spritenum, int pal, 
             dmost[x] = startdmost[x];
     }
     clipsmost(spritenum, depth, x1, x2, umost, dmost, 0, 1);
+    picksprite(x1, x2, umost, dmost, 1, sectnum, spritenum, 3); /* 0x4EF1E */
     globalorientation = cstat;
     globalpicnum = tilenum;
     loadtile(globalpicnum);
@@ -2166,6 +2242,10 @@ static void drawsprite(int sxpos, int depth, short tilenum, short spritenum, int
             dmost[x] = startdmost[x];
         }
         clipsmost(spritenum, depth, xb1[z], xb2[z], umost, dmost, 0, 0);
+        /* 0x4DDDB */
+        if (searchit >= 1 && searchx >= xb1[z] && searchx <= xb2[z] && searchy >= umost[searchx]
+            && searchy <= dmost[searchx])
+            picksprite(xb1[z], xb2[z], uwall2, dwall2, 1, sectnum, spritenum, 3);
         if (cstat & 2) {
             for (x = xb1[z]; umost[x] > dmost[x] && x <= xb2[z]; x++)
                 ;
@@ -2241,6 +2321,7 @@ static void drawsprite(int sxpos, int depth, short tilenum, short spritenum, int
             dwall2[x] = startdmost[x] > flor ? flor : startdmost[x];
         }
         clipsmost(spritenum, depth, x1, x2, uwall2, dwall2, 1, 0);
+        picksprite(x1, x2, uwall2, dwall2, 0, sectnum, spritenum, 3); /* 0x4D187 */
         for (x = x1; x <= x2; x++) {
             int y1 = uwall2[x], y2 = dwall2[x] - 1;
 
@@ -2518,12 +2599,12 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
     }
 }
 
-/* 0x5393D: a line in colour col on the 640x350 map, clipped as the exe
-   clips it. */
-static void drawline16(int x1, int y1, int x2, int y2, int col)
+/* 0x5393D: a line in colour col on the 640-wide 2D screen, clipped to its
+   top ydim16 rows as the exe clips it. */
+void drawline16(int x1, int y1, int x2, int y2, int col)
 {
     unsigned char *f = frame;
-    const int h = 350;
+    const int h = ydim16;
     int dx, dy, i, e, p;
 
     col &= 15;
@@ -2648,37 +2729,99 @@ static int isshown(const unsigned char *bits, int i)
     return (bits[i >> 3] >> (i & 7)) & 1;
 }
 
-/* 0x5445E as the game calls it (no grid, no editor marks): every shown wall
-   (one-sided grey, two-sided red, blocking magenta, masked thick), every
-   shown sprite as a ring with its heading, and the arrow at the centre.
-   The view looks from (x, y) at zoom/16384 pixels a unit. */
-void draw2dscreen(int x, int y, short ang, int zoom, const unsigned char *spriteshown)
+/* 0x54130: the 2D area above the status bar, ydim16 rows. */
+void clear2dscreen(void)
 {
-    const short *sin = sintable();
-    int i, j, k, ax, ay;
+    memset(frame, 0, (size_t)(640 * ydim16));
+}
 
-    memset(frame, 0, 640 * 350);
+/* 0x5417F: grid lines in colour 8 every 2048 >> gride units over the
+   -65536..65536 board, clipped to the 2D area. */
+void draw2dgrid(int x, int y, short ang, int zoom, short gride)
+{
+    int i, top, bot, last = (int)0x80000000;
+
+    (void)ang;
+    if (gride <= 0)
+        return;
+    top = 200 - (int)(((long long)zoom * (y + 65536)) >> 14);
+    bot = 200 - (int)(((long long)zoom * (y - 65536)) >> 14);
+    if (top < 0)
+        top = 0;
+    if (bot >= ydim16)
+        bot = ydim16 - 1;
+    if (top < ydim16 && bot >= 0 && bot >= top)
+        for (i = -65536; i <= 65536; i += 2048 >> gride) {
+            int sx = 320 - (int)(((long long)zoom * (x - i)) >> 14), r;
+
+            if (sx >= 640)
+                break;
+            if (sx >= 0)
+                for (r = top; r <= bot; r++)
+                    frame[640 * r + sx] = 8;
+        }
+    for (i = -65536; i <= 65536; i += 2048 >> gride) {
+        int sy = (zoom * (y - i)) >> 14;
+
+        if (sy != last && sy > -200 && sy <= 200) {
+            last = sy;
+            drawline16(320 - (int)(((long long)zoom * (x + 65536)) >> 14), 200 - sy,
+                320 - (int)(((long long)zoom * (x - 65536)) >> 14), 200 - sy, 8);
+        }
+    }
+}
+
+/* 0x5445E: the 2D view from (x, y) at zoom/16384 pixels a unit. Walls are
+   grey one-sided, red two-sided, magenta blocking, thick masked; sprites a
+   ring with a heading; the arrow at the centre is the viewer. In the game
+   (editstatus 0) it clears and draws the grid itself and shows only what
+   show2dwall/show2dsprite mark. In the editor it shows everything, marks
+   wall points at zoom 256 and up, and blinks the highlights on numframes. */
+void draw2dscreen(int x, int y, short ang, int zoom, short gride)
+{
+    static const short wallmark[16] = { -1282, -1281, -1280, -1279, -1278, 1278, 1279, 1280, 1281, 1282,
+        -642, -2, 638, -638, 2, 642 };
+    static const short spritering[16] = { -1281, -1280, -1279, 1279, 1280, 1281, -642, -2, 638, -638, 2, 642,
+        641, 639, -639, -641 };
+    const short *sin = sintable();
+    int blink = 4 * (numframes & 2), i, j, k, ax, ay;
+
+    if (ydim == 200)
+        return;
+    if (editstatus == 0) {
+        clear2dscreen();
+        draw2dgrid(x, y, ang, zoom, gride);
+    }
     for (i = 0; i < numwalls; i++) {
         int ns = wall[i].nextwall, col, x1, y1, x2, y2;
 
-        if (!isshown(show2dwall, i))
-            continue;
-        if (ns >= 0 && ns < i && isshown(show2dwall, ns))
-            continue;
+        if (editstatus != 0) {
+            if (ns >= 0 && ns < i)
+                continue;
+        } else {
+            if (!isshown(show2dwall, i))
+                continue;
+            if (ns >= 0 && ns < i && isshown(show2dwall, ns))
+                continue;
+        }
         if (ns == -1) {
             col = 7;
+            if (linehighlight == i)
+                col = blink + 7;
         } else {
             col = 4;
             if (wall[i].cstat & 1)
                 col = 5;
             if (wall[i].cstat & 0x40)
                 col = 0x85;
+            if (linehighlight == i || (linehighlight >= 0 && wall[linehighlight].nextwall == i))
+                col += blink;
         }
         x1 = (int)(((long long)zoom * (wall[i].x - x)) >> 14) + 320;
         y1 = (int)(((long long)zoom * (wall[i].y - y)) >> 14) + 200;
         x2 = (int)(((long long)zoom * (wall[wall[i].point2].x - x)) >> 14) + 320;
         y2 = (int)(((long long)zoom * (wall[wall[i].point2].y - y)) >> 14) + 200;
-        if (col < 16) {
+        if ((col & 0xFF) < 16) {
             drawline16(x1, y1, x2, y2, col);
         } else {
             drawline16(x1 + 1, y1, x2 + 1, y2, col + 0x80);
@@ -2687,25 +2830,35 @@ void draw2dscreen(int x, int y, short ang, int zoom, const unsigned char *sprite
             drawline16(x1, y1 - 1, x2, y2 - 1, col + 0x80);
             drawline16(x1, y1, x2, y2, 13);
         }
-    }
-    for (j = 0; j < MAXSTATUS; j++) {
-        for (k = headspritestat[j]; k != -1; k = nextspritestat[k]) {
-            static const signed char ring[16][2] = {
-                { -1, -2 }, { 0, -2 }, { 1, -2 }, { -1, 2 }, { 0, 2 }, { 1, 2 }, { -2, -1 }, { -2, 0 },
-                { -2, 1 }, { 2, -1 }, { 2, 0 }, { 2, 1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 },
-            };
-            int col = (sprite[k].cstat & 1) ? 5 : 3, sx, sy, r;
+        if (zoom >= 256 && editstatus == 1 && x1 >= 2 && x1 <= 637 && y1 >= 2 && y1 <= ydim16 - 3) {
+            int mc = 2;
 
-            if (!isshown(spriteshown, k))
-                continue;
-            sx = (int)(((long long)zoom * (sprite[k].x - x)) >> 14) + 320;
-            sy = (int)(((long long)zoom * (sprite[k].y - y)) >> 14) + 200;
-            if (sx < 2 || sx > 637 || sy < 2 || sy > 347)
-                continue;
-            for (r = 0; r < 16; r++)
-                frame[640 * (sy + ring[r][1]) + sx + ring[r][0]] = (unsigned char)col;
-            drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) / 768 + sx,
-                (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) / 768 + sy, col);
+            if (pointhighlight == i || (highlightcnt > 0 && isshown(show2dwall, i)))
+                mc = blink + 2;
+            for (j = 0; j < 16; j++)
+                frame[x1 + 640 * y1 + wallmark[j]] = (unsigned char)mc;
+        }
+    }
+    if (zoom >= 256 || editstatus == 0) {
+        for (j = 0; j < MAXSTATUS; j++) {
+            for (k = headspritestat[j]; k != -1; k = nextspritestat[k]) {
+                int col, sx, sy, r;
+
+                if (editstatus != 1 && !isshown(show2dsprite, k))
+                    continue;
+                col = (sprite[k].cstat & 1) ? 5 : 3;
+                if (editstatus == 1
+                    && (k + 4096 == pointhighlight || (highlightcnt > 0 && isshown(show2dsprite, k))))
+                    col += blink;
+                sx = (int)(((long long)zoom * (sprite[k].x - x)) >> 14) + 320;
+                sy = (int)(((long long)zoom * (sprite[k].y - y)) >> 14) + 200;
+                if (sx < 2 || sx > 637 || sy < 2 || sy > ydim16 - 3)
+                    continue;
+                for (r = 0; r < 16; r++)
+                    frame[sx + 640 * sy + spritering[r]] = (unsigned char)col;
+                drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) / 768 + sx,
+                    (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) / 768 + sy, col);
+            }
         }
     }
     ax = (int)(((long long)zoom * sin[(ang + 2560) & 2047]) >> 11) / 768;
@@ -2713,4 +2866,57 @@ void draw2dscreen(int x, int y, short ang, int zoom, const unsigned char *sprite
     drawline16(ax + 320, ay + 200, 320 - ax, 200 - ay, 15);
     drawline16(ax + 320, ay + 200, ay + 320, 200 - ax, 15);
     drawline16(ax + 320, ay + 200, 320 - ay, ax + 200, 15);
+}
+
+/* Not in the exe's game paths; written for build.c. Text in the two
+   TABLES.DAT fonts: 0 is 8x8 (offset 8832), 1 the 4x6 small font (offset
+   9856), 8 bytes a character, top bit leftmost. A negative backcol leaves
+   the background. */
+static void printext(unsigned char *dst, int dpitch, int w, int h, int xpos, int ypos, int col, int backcol,
+    const char *name, int fontsize)
+{
+    const unsigned char *font = tables_dat() + (fontsize ? 9856 : 8832);
+    int cw = fontsize ? 4 : 8, ch = fontsize ? 6 : 8, i, r, c;
+
+    for (i = 0; name[i]; i++) {
+        const unsigned char *g = font + 8 * (unsigned char)name[i];
+
+        for (r = 0; r < ch; r++)
+            for (c = 0; c < cw; c++) {
+                int px = xpos + i * cw + c, py = ypos + r;
+
+                if (px < 0 || px >= w || py < 0 || py >= h)
+                    continue;
+                if (g[r] & (0x80 >> c))
+                    dst[py * dpitch + px] = (unsigned char)col;
+                else if (backcol >= 0)
+                    dst[py * dpitch + px] = (unsigned char)backcol;
+            }
+    }
+}
+
+void printext16(int xpos, int ypos, short col, short backcol, const char *name, char fontsize)
+{
+    printext(frame, 640, 640, ydim, xpos, ypos, col, backcol, name, fontsize);
+}
+
+void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize)
+{
+    printext(frame + frameoffset, pitch(), xdimen, ydimen, xpos, ypos, col, backcol, name, fontsize);
+}
+
+/* A pixel in the current mode: the 2D screen is 640 wide, the 3D one pitch(). */
+void plotpixel(int x, int y, char col)
+{
+    if (x >= 0 && y >= 0 && x < xdim && y < ydim)
+        frame[y * (ydim16 ? 640 : pitch()) + x] = (unsigned char)col;
+}
+
+/* 0x4A534's frame count; nextpage shows the frame and counts it. */
+int numframes;
+
+void nextpage(void)
+{
+    platform_present(frame, xdim, ydim);
+    numframes++;
 }

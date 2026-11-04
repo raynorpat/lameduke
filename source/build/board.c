@@ -109,8 +109,10 @@ int insertsprite(short sectnum, short statnum)
     return insertspritesect(sectnum);
 }
 
-/* byte_1B8010: walls the 2D map shows. */
+/* byte_1B8010 and byte_1B4D90: walls and sprites the 2D map shows (in the
+   editor, the highlighted ones). */
 unsigned char show2dwall[(MAXWALLS + 7) >> 3];
+unsigned char show2dsprite[(MAXSPRITES + 7) >> 3];
 
 /* word_23DE7A and unk_1BCF10: 10-byte records that close a board. Nothing
    reads them; saveboard writes them back. */
@@ -329,6 +331,64 @@ int checkboard(void (*report)(const char *))
         DEFECT("start is not inside sector %d", cursectnum);
 #undef DEFECT
     return bad;
+}
+
+/* Not in the exe; written as build.c expects them. */
+int sectorofwall(short theline)
+{
+    int s = sectorofwallnum(theline);
+
+    return s < 0 ? 0 : s;
+}
+
+/* Which loop of the sector holds wallnum: loops are stored one after
+   another, each ending at the wall whose point2 is its first. */
+int loopnumofsector(short sectnum, short wallnum)
+{
+    int start = sector[sectnum].wallptr, last = start + sector[sectnum].wallnum - 1, loop = 0;
+
+    while (start <= last) {
+        int end = start;
+
+        while (end < last && wall[end].point2 != start)
+            end++;
+        if (wallnum >= start && wallnum <= end)
+            return loop;
+        loop++;
+        start = end + 1;
+    }
+    return -1;
+}
+
+/* Make newfirstwall the sector's wallptr by rotating its first loop; the
+   other loops and every link into the sector are renumbered to match. */
+void setfirstwall(short sectnum, short newfirstwall)
+{
+    static walltype tmp[MAXWALLS];
+    int first = sector[sectnum].wallptr, num = sector[sectnum].wallnum, end, shift, i, j;
+
+    if (newfirstwall <= first || newfirstwall >= first + num)
+        return;
+    /* the first loop runs from first to the wall whose point2 is first */
+    for (end = first; end < first + num && wall[end].point2 != first; end++)
+        ;
+    if (newfirstwall > end)
+        return;
+    shift = newfirstwall - first;
+    for (i = first; i <= end; i++)
+        tmp[i] = wall[i];
+    for (i = first; i <= end; i++) {
+        int from = first + (i - first + shift) % (end - first + 1);
+
+        wall[i] = tmp[from];
+        wall[i].point2 = (short)(first + (wall[i].point2 - first - shift + (end - first + 1)) % (end - first + 1));
+    }
+    for (j = 0; j < numwalls; j++) {
+        int nw = wall[j].nextwall;
+
+        if (nw >= first && nw <= end)
+            wall[j].nextwall = (short)(first + (nw - first - shift + (end - first + 1)) % (end - first + 1));
+    }
 }
 
 int inside(int x, int y, short sect)

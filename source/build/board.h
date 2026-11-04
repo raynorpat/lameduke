@@ -72,6 +72,7 @@ extern short cursectnum;
 
 /* 0 on a version-5 board that is fully consumed. -1 otherwise. */
 extern unsigned char show2dwall[(MAXWALLS + 7) >> 3];
+extern unsigned char show2dsprite[(MAXSPRITES + 7) >> 3];
 int loadboard(const char *filename);
 int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect);
 /* The editor's save: sprites in index order, and the closing count only if
@@ -83,6 +84,9 @@ int writeboard(const char *filename, int px, int py, int pz, short startang, sho
    outside a real sector, and a start outside its sector; returns the count.
    Several shipped maps have a few of these, and the game loads them. */
 int checkboard(void (*report)(const char *));
+int sectorofwall(short theline);
+int loopnumofsector(short sectnum, short wallnum);
+void setfirstwall(short sectnum, short newfirstwall);
 
 /* 0x4B977. 1 when (x,y) is inside the sector, 0 when it is not, -1 if sect is invalid. */
 int inside(int x, int y, short sect);

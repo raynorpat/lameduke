@@ -35,25 +35,40 @@ void setgamemode(void)
         xdim = 320;
         ydim = 200;
     }
+    ydim16 = 0;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
     setbrightness(curbrightness);
 }
 
+static const unsigned char ega[16][3] = {
+    { 0, 0, 0 }, { 0, 0, 170 }, { 0, 170, 0 }, { 0, 170, 170 }, { 170, 0, 0 }, { 170, 0, 170 },
+    { 170, 85, 0 }, { 170, 170, 170 }, { 85, 85, 85 }, { 85, 85, 255 }, { 85, 255, 85 }, { 85, 255, 255 },
+    { 255, 85, 85 }, { 255, 85, 255 }, { 255, 255, 85 }, { 255, 255, 255 },
+};
+
 /* 0x53F42: the 640x350 16-colour mode the 2D map draws in, with the
    palette the BIOS sets for it. setgamemode puts the game palette back. */
 void setmapmode(void)
 {
-    static const unsigned char ega[16][3] = {
-        { 0, 0, 0 }, { 0, 0, 170 }, { 0, 170, 0 }, { 0, 170, 170 }, { 170, 0, 0 }, { 170, 0, 170 },
-        { 170, 85, 0 }, { 170, 170, 170 }, { 85, 85, 85 }, { 85, 85, 255 }, { 85, 255, 85 }, { 85, 255, 255 },
-        { 255, 85, 85 }, { 255, 85, 255 }, { 255, 255, 85 }, { 255, 255, 255 },
-    };
-
     xdim = 640;
     ydim = 350;
+    ydim16 = 350;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
+    memcpy(palette, ega, sizeof ega);
+}
+
+/* 0x53FF8: the 640x480 16-colour mode, 336 rows for the 2D view and the
+   rest for the status bar. */
+void qsetmode640480(void)
+{
+    xdim = 640;
+    ydim = 480;
+    ydim16 = 336;
+    if (platform_video(xdim, ydim) != 0)
+        errorexit(platform_video_error());
+    memset(palette, 0, sizeof palette);
     memcpy(palette, ega, sizeof ega);
 }
 

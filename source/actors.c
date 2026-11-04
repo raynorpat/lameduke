@@ -18,7 +18,6 @@
 #include <stdlib.h>
 
 int hittype[MAXSPRITES][5];
-unsigned char show2dsprite[(MAXSPRITES + 7) >> 3]; /* byte_1B4D90 */
 int msx[1024], msy[1024];                          /* 0x122830, 0x123830 */
 int mspos;                                         /* dword_8AC60 */
 short randomstash;
