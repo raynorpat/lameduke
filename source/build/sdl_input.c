@@ -190,6 +190,15 @@ static int syncbits_from_keys(void)
     return (int)bits;
 }
 
+/* word_23DE7C: initengine (0x4A211) resets the mouse driver only when
+   SETUP.DAT byte 3 is 1 or 2. */
+int mouse_present(void)
+{
+    int m = setup_byte(3);
+
+    return m == 1 || m == 2;
+}
+
 /* 0x53914: the motion since the last read, and the buttons held. */
 void getmousevalues(int *dx, int *dy, int *buttons)
 {
@@ -213,8 +222,10 @@ void input_sample(int steps, int *fvel, int *svel, int *avel, int *bits)
 
     for (i = 0; i < steps; i++)
         ramp_step();
-    ramp_t = clamp_vel(((sens * mouse_x) >> 7) + ramp_t);
-    ramp_f = clamp_vel(ramp_f - ((mouse_y * sens) >> 7));
+    if (mouse_present()) {
+        ramp_t = clamp_vel(((sens * mouse_x) >> 7) + ramp_t);
+        ramp_f = clamp_vel(ramp_f - ((mouse_y * sens) >> 7));
+    }
     mouse_x = 0;
     mouse_y = 0;
     *fvel = ramp_f;

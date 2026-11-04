@@ -9,6 +9,7 @@ extern int mousesens; /* word_1257B7 */
 
 /* Returns 1 when the window is closed. */
 int input_poll(void);
+int mouse_present(void);
 void getmousevalues(int *dx, int *dy, int *buttons);
 void input_clear(void);
 
