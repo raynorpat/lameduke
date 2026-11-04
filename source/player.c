@@ -395,7 +395,7 @@ void processinput(short snum)
     }
     if (syncbits[snum] & 0x40)
         p->lookang -= 192;
-    else if (syncbits[snum] < 0)
+    else if (syncbits[snum] & 0x80)
         p->lookang += 192;
     p->lookang -= p->lookang / 3;
     if (p->w82 >= 0)
