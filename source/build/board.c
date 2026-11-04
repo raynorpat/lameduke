@@ -109,6 +109,9 @@ int insertsprite(short sectnum, short statnum)
     return insertspritesect(sectnum);
 }
 
+/* byte_1B8010: walls the 2D map shows. */
+unsigned char show2dwall[(MAXWALLS + 7) >> 3];
+
 /* word_23DE7A and unk_1BCF10: 10-byte records that close a board. Nothing
    reads them; saveboard writes them back. */
 static short numboardextra;
@@ -125,6 +128,7 @@ int loadboard(const char *filename)
 
     free_board();
     initspritelists();
+    memset(show2dwall, 0, sizeof show2dwall);
     fp = plat_fopen(filename, "rb");
     if (!fp)
         return -1;

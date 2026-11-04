@@ -2517,3 +2517,200 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
         }
     }
 }
+
+/* 0x5393D: a line in colour col on the 640x350 map, clipped as the exe
+   clips it. */
+static void drawline16(int x1, int y1, int x2, int y2, int col)
+{
+    unsigned char *f = frame;
+    const int h = 350;
+    int dx, dy, i, e, p;
+
+    col &= 15;
+    if (!((x1 >= 0 || x2 >= 0) && (x1 < 640 || x2 < 640) && (y1 >= 0 || y2 >= 0)))
+        return;
+    if (!(y1 < h || h > y2))
+        return;
+    if (x1 == x2) {
+        if (y2 < y1) {
+            int t = y1;
+
+            y1 = y2;
+            y2 = t;
+        }
+        if (y1 < 0)
+            y1 = 0;
+        if (y2 >= h)
+            y2 = h - 1;
+        for (i = y1; i <= y2; i++)
+            f[640 * i + x1] = (unsigned char)col;
+        return;
+    }
+    if (y1 == y2) {
+        if (x2 < x1) {
+            int t = x1;
+
+            x1 = x2;
+            x2 = t;
+        }
+        if (x1 < 0)
+            x1 = 0;
+        if (x2 >= 640)
+            x2 = 639;
+        for (i = x1; i <= x2; i++)
+            f[640 * y1 + i] = (unsigned char)col;
+        return;
+    }
+    if (x1 < 0 && x1 != x2) {
+        y1 -= x1 * (y2 - y1) / (x2 - x1);
+        x1 = 0;
+    }
+    if (x2 < 0 && x1 != x2) {
+        y2 -= x2 * (y2 - y1) / (x2 - x1);
+        x2 = 0;
+    }
+    if (y1 < 0 && y1 != y2) {
+        x1 -= y1 * (x2 - x1) / (y2 - y1);
+        y1 = 0;
+    }
+    if (y2 < 0 && y1 != y2) {
+        x2 -= y2 * (x2 - x1) / (y2 - y1);
+        y2 = 0;
+    }
+    if (x1 >= 640 && x1 != x2) {
+        y1 += (639 - x1) * (y2 - y1) / (x2 - x1);
+        x1 = 639;
+    }
+    if (x2 >= 640 && x1 != x2) {
+        y2 += (y2 - y1) * (639 - x2) / (x2 - x1);
+        x2 = 639;
+    }
+    if (y1 >= h && y1 != y2) {
+        x1 += (h - 1 - y1) * (x2 - x1) / (y2 - y1);
+        y1 = h - 1;
+    }
+    if (y2 >= h && y1 != y2) {
+        x2 += (x2 - x1) * (h - 1 - y2) / (y2 - y1);
+        y2 = h - 1;
+    }
+    if (!((x1 >= 0 || x2 >= 0) && (x1 < 640 || x2 < 640) && (y1 >= 0 || y2 >= 0)) || !(y1 < h || h > y2))
+        return;
+    dx = abs(x2 - x1) + 1;
+    dy = abs(y2 - y1) + 1;
+    e = 0;
+    if (dx >= dy) {
+        if (x2 < x1) {
+            int t = x1;
+
+            x1 = x2;
+            x2 = t;
+            t = y1;
+            y1 = y2;
+            y2 = t;
+        }
+        p = x1 + 640 * y1;
+        for (i = dx; i > 0; i--) {
+            if (p >= 0 && p < 640 * h)
+                f[p] = (unsigned char)col;
+            e += dy;
+            if (e >= dx) {
+                e -= dx;
+                p += y2 > y1 ? 640 : -640;
+            }
+            p++;
+        }
+    } else {
+        if (y2 < y1) {
+            int t = x1;
+
+            x1 = x2;
+            x2 = t;
+            t = y1;
+            y1 = y2;
+            y2 = t;
+        }
+        p = x1 + 640 * y1;
+        for (i = dy; i > 0; i--) {
+            if (p >= 0 && p < 640 * h)
+                f[p] = (unsigned char)col;
+            e += dx;
+            if (e >= dy) {
+                e -= dy;
+                p += x2 > x1 ? 1 : -1;
+            }
+            p += 640;
+        }
+    }
+}
+
+static int isshown(const unsigned char *bits, int i)
+{
+    return (bits[i >> 3] >> (i & 7)) & 1;
+}
+
+/* 0x5445E as the game calls it (no grid, no editor marks): every shown wall
+   (one-sided grey, two-sided red, blocking magenta, masked thick), every
+   shown sprite as a ring with its heading, and the arrow at the centre.
+   The view looks from (x, y) at zoom/16384 pixels a unit. */
+void draw2dscreen(int x, int y, short ang, int zoom, const unsigned char *spriteshown)
+{
+    const short *sin = sintable();
+    int i, j, k, ax, ay;
+
+    memset(frame, 0, 640 * 350);
+    for (i = 0; i < numwalls; i++) {
+        int ns = wall[i].nextwall, col, x1, y1, x2, y2;
+
+        if (!isshown(show2dwall, i))
+            continue;
+        if (ns >= 0 && ns < i && isshown(show2dwall, ns))
+            continue;
+        if (ns == -1) {
+            col = 7;
+        } else {
+            col = 4;
+            if (wall[i].cstat & 1)
+                col = 5;
+            if (wall[i].cstat & 0x40)
+                col = 0x85;
+        }
+        x1 = (int)(((long long)zoom * (wall[i].x - x)) >> 14) + 320;
+        y1 = (int)(((long long)zoom * (wall[i].y - y)) >> 14) + 200;
+        x2 = (int)(((long long)zoom * (wall[wall[i].point2].x - x)) >> 14) + 320;
+        y2 = (int)(((long long)zoom * (wall[wall[i].point2].y - y)) >> 14) + 200;
+        if (col < 16) {
+            drawline16(x1, y1, x2, y2, col);
+        } else {
+            drawline16(x1 + 1, y1, x2 + 1, y2, col + 0x80);
+            drawline16(x1 - 1, y1, x2 - 1, y2, col + 0x80);
+            drawline16(x1, y1 + 1, x2, y2 + 1, col + 0x80);
+            drawline16(x1, y1 - 1, x2, y2 - 1, col + 0x80);
+            drawline16(x1, y1, x2, y2, 13);
+        }
+    }
+    for (j = 0; j < MAXSTATUS; j++) {
+        for (k = headspritestat[j]; k != -1; k = nextspritestat[k]) {
+            static const signed char ring[16][2] = {
+                { -1, -2 }, { 0, -2 }, { 1, -2 }, { -1, 2 }, { 0, 2 }, { 1, 2 }, { -2, -1 }, { -2, 0 },
+                { -2, 1 }, { 2, -1 }, { 2, 0 }, { 2, 1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 },
+            };
+            int col = (sprite[k].cstat & 1) ? 5 : 3, sx, sy, r;
+
+            if (!isshown(spriteshown, k))
+                continue;
+            sx = (int)(((long long)zoom * (sprite[k].x - x)) >> 14) + 320;
+            sy = (int)(((long long)zoom * (sprite[k].y - y)) >> 14) + 200;
+            if (sx < 2 || sx > 637 || sy < 2 || sy > 347)
+                continue;
+            for (r = 0; r < 16; r++)
+                frame[640 * (sy + ring[r][1]) + sx + ring[r][0]] = (unsigned char)col;
+            drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) / 768 + sx,
+                (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) / 768 + sy, col);
+        }
+    }
+    ax = (int)(((long long)zoom * sin[(ang + 2560) & 2047]) >> 11) / 768;
+    ay = (int)(((long long)zoom * sin[(ang + 2048) & 2047]) >> 11) / 768;
+    drawline16(ax + 320, ay + 200, 320 - ax, 200 - ay, 15);
+    drawline16(ax + 320, ay + 200, ay + 320, 200 - ax, 15);
+    drawline16(ax + 320, ay + 200, 320 - ay, ax + 200, 15);
+}

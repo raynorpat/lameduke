@@ -191,12 +191,12 @@ static int syncbits_from_keys(void)
 }
 
 /* word_23DE7C: initengine (0x4A211) resets the mouse driver only when
-   SETUP.DAT byte 3 is 1 or 2. */
+   SETUP.DAT byte 3 is 1 or 2, after turning a 0 into 1. */
 int mouse_present(void)
 {
     int m = setup_byte(3);
 
-    return m == 1 || m == 2;
+    return m <= 2;
 }
 
 /* 0x53914: the motion since the last read, and the buttons held. */

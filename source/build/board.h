@@ -71,6 +71,7 @@ extern short ang;
 extern short cursectnum;
 
 /* 0 on a version-5 board that is fully consumed. -1 otherwise. */
+extern unsigned char show2dwall[(MAXWALLS + 7) >> 3];
 int loadboard(const char *filename);
 int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect);
 

@@ -40,6 +40,23 @@ void setgamemode(void)
     setbrightness(curbrightness);
 }
 
+/* 0x53F42: the 640x350 16-colour mode the 2D map draws in, with the
+   palette the BIOS sets for it. setgamemode puts the game palette back. */
+void setmapmode(void)
+{
+    static const unsigned char ega[16][3] = {
+        { 0, 0, 0 }, { 0, 0, 170 }, { 0, 170, 0 }, { 0, 170, 170 }, { 170, 0, 0 }, { 170, 0, 170 },
+        { 170, 85, 0 }, { 170, 170, 170 }, { 85, 85, 85 }, { 85, 85, 255 }, { 85, 255, 85 }, { 85, 255, 255 },
+        { 255, 85, 85 }, { 255, 85, 255 }, { 255, 255, 85 }, { 255, 255, 255 },
+    };
+
+    xdim = 640;
+    ydim = 350;
+    if (platform_video(xdim, ydim) != 0)
+        errorexit(platform_video_error());
+    memcpy(palette, ega, sizeof ega);
+}
+
 /* 0x57A5A: the DAC gets each colour through row level of the brightness
    table, the last 1024 bytes of TABLES.DAT. */
 void setbrightness(int level)
