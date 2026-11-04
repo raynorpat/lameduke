@@ -55,7 +55,7 @@ Build: `cmake --preset default && cmake --build --preset default`. The binary is
 
 - [ ] **Step 1: Reproduce.** On Linux or macOS (or WSL in the repo dir), run `./build/d3d` and expect it to fail on `lookup.dat` or `tables.dat`. Write down the failure.
 - [ ] **Step 2: Implement** `plat_fopen` and replace every listed `fopen`. Spell each name the way the executable's string spells it (lowercase, for example `"palette.dat"` and not `"PALETTE.DAT"`).
-- [ ] **Step 3: Verify.** On Linux run `./build/d3d`: the attract demo starts. On Windows it is unchanged. The current port's `check_file_id()` returns 0 without `FILE_ID.DIZ`; this differs from the original executable, which reports `No good.` and deletes its executable when the file is missing. The port's non-destructive behavior allows the supplied files to start without the missing identification file.
+- [x] **Step 3: Verify.** On Linux run `./build/d3d`: the attract demo starts. On Windows it is unchanged. The current port's `check_file_id()` returns 0 without `FILE_ID.DIZ`; this differs from the original executable, which reports `No good.` and deletes its executable when the file is missing. The port's non-destructive behavior allows the supplied files to start without the missing identification file.
 - [ ] **Step 4: Implement** `LAMEDUKE_FRAME_AT` and `LAMEDUKE_TRACE` in `game.c`. When `LAMEDUKE_FRAME` is set, demo playback skips its wall-clock wait so captures are fast.
 - [ ] **Step 5: Verify.** Run `LAMEDUKE_TRACE=1 ./build/d3d > t0.txt` and stop it after one demo. Run it again. The two files are identical. Run `LAMEDUKE_FRAME=f.bmp LAMEDUKE_FRAME_AT=200 ./build/d3d`: it writes `f.bmp` and exits 0.
 - [ ] **Step 6: Commit.** Commit the uncommitted ramp and movement work first as its own commit (`game: lift the sync ramp and movement step`), after confirming with the owner. Then `build: open shipped files case-insensitively`.
@@ -120,7 +120,7 @@ The unchecked steps below retain the original verification detail; completion wa
 - [ ] **Step 3: Verify** with `/v1 /l1` against DOSBox. Open the first door, fire each weapon, and kill the first enemy, and the same things happen. Mouse X turns. Mouse Y does not change the horizon. A and Z look.
 - [ ] **Step 4: Commit** after each sub-part works: `game: lift <part> from the executable`
 
-### Task 6: Demos and the attract loop
+### Task 6: Demos and the attract loop — complete
 
 **Files:** `source/game.c` (`play_demo`, `main`), `source/demo.c`
 
@@ -150,11 +150,15 @@ The unchecked steps below retain the original verification detail; completion wa
 - The pistol was never missing. The player drowns in demo 1 (health 0 from tic 526 to 578), and that is when the camera releases the view.
 - The exe redraws while it waits for its clock, so a few fields depend on how many frames it drew: shell casing frames (pic 1165), the SE 27 camera `yvel` clamp, and the viewscreen's owner and frame counter (1408). The comparison masks these, along with the sector -1 sprite that a missed hitscan spawns from leftover stack values.
 
-- [ ] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
-- [ ] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").
+- Attract order (`0x15E01`): demo 1 plays first, the index goes up after each load, and it wraps from 8 to 0. A missing demo is `errorexit("Demo not found.")` (`0x1B810`), as in the port.
+- Recording (`/r`) sets `demomode` to 1. `domovethings` (`0x18EEB`) records one sample per unpaused tic. The count stops at `0x3FFF`, and later tics overwrite the slot after the last kept sample. On exit, `0x1B920` drops the last sample and writes `mydemo_0.dmo` for `/v1 /l1`, otherwise `mydemo_1.dmo`.
+- Step 3 was checked against a per-tic state trace of the whole attract cycle, not by eye. `.superpowers/checks/demo.sh` compares demo 1 with `ref/demo1.trace`. With a 2-second stall at sample 100, the trace is unchanged.
+
+- [x] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
+- [x] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").
 - [ ] **Step 3: Verify.** Watch all eight demos beside DOSBox. The player follows the same route and shoots the same things, and none desyncs (no walking into walls, no early end). Save `LAMEDUKE_TRACE=1` output for demo 1 as `ref/demo1.trace`.
-- [ ] **Step 4: Stall test.** Add a temporary 2-second `SDL_Delay` at sample 100 and run the trace again. It matches `ref/demo1.trace` exactly. Remove the delay.
-- [ ] **Step 5: Commit:** `game: play the attract demos through the full simulation`
+- [x] **Step 4: Stall test.** Add a temporary 2-second `SDL_Delay` at sample 100 and run the trace again. It matches `ref/demo1.trace` exactly. Remove the delay.
+- [x] **Step 5: Commit:** `game: play the attract demos through the full simulation`
 
 ### Task 7: Sound effects
 
