@@ -21,6 +21,8 @@
 #define _INCLUDE_BSTUB_H_
 
 void ExtInit(void);
+/* LameDuke: the tile names build.c shows (it read names.h). */
+void ExtLoadNames(char names[][17]);
 void ExtUnInit(void);
 void ExtLoadMap(const char *mapname);
 void ExtSaveMap(const char *mapname);
