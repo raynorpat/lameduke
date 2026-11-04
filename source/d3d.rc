@@ -1,0 +1,2 @@
+// SDL2 uses the executable's first icon for its windows.
+IDI_MAIN_ICON ICON "rsrc/duke3d.ico"

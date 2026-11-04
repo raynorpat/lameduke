@@ -7,4 +7,7 @@ set_target_properties(buildeditor PROPERTIES OUTPUT_NAME build)
 target_link_libraries(buildeditor PRIVATE lameduke_compile_options buildengine ${LAMEDUKE_SDL2MAIN_TARGET})
 if(WIN32)
   set_property(TARGET buildeditor PROPERTY WIN32_EXECUTABLE FALSE)
+  target_sources(buildeditor PRIVATE build.rc)
+  set_source_files_properties(build.rc PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../rsrc/build.ico")
 endif()

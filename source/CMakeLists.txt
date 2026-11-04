@@ -21,4 +21,7 @@ target_link_libraries(d3d PRIVATE
 
 if(WIN32)
   set_property(TARGET d3d PROPERTY WIN32_EXECUTABLE FALSE)
+  target_sources(d3d PRIVATE d3d.rc)
+  set_source_files_properties(d3d.rc PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/rsrc/duke3d.ico")
 endif()

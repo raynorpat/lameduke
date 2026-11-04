@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.24)
 
 project(lameduke LANGUAGES C)
 
+if(WIN32)
+  enable_language(RC)
+endif()
+
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
