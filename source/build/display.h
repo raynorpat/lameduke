@@ -9,6 +9,8 @@ int loadlookup(void);
 
 /* First 768 bytes of PALETTE.DAT, expanded from VGA 6-bit to 0..255. */
 int loadpalette(void);
+void setbrightness(int level);
+void screencapture(void);
 extern unsigned char palette[768];
 extern unsigned char *palookup[256];
 extern int numpalookups;

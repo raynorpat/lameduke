@@ -1,5 +1,7 @@
 #include "display.h"
+#include "draw.h"
 #include "engine.h"
+#include "math.h"
 
 #include "platform.h"
 
@@ -12,6 +14,8 @@
 int xdim = 320;
 int ydim = 200;
 unsigned char palette[768];
+static unsigned char vgapalette[768]; /* PALETTE.DAT's 6-bit colours */
+static int curbrightness;             /* dword_82C12 */
 unsigned char *palookup[256]; /* dword_1BCB10 */
 int numpalookups;              /* word_23DE78 */
 unsigned char *transluc;       /* dword_82C1F */
@@ -33,6 +37,63 @@ void setgamemode(void)
     }
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
+    setbrightness(curbrightness);
+}
+
+/* 0x57A5A: the DAC gets each colour through row level of the brightness
+   table, the last 1024 bytes of TABLES.DAT. */
+void setbrightness(int level)
+{
+    const unsigned char *britable = tables_dat() + TABLES_DAT_SIZE - 1024;
+    int i;
+
+    curbrightness = level > 15 ? 15 : level;
+    for (i = 0; i < 768; i++) {
+        unsigned v = britable[64 * curbrightness + vgapalette[i]];
+
+        palette[i] = (unsigned char)((v << 2) | (v >> 4));
+    }
+}
+
+/* 0x4B390: the 320x200 screen to captNNNN.pcx, counting up from capt0000
+   each run; a file that will not open takes its number back. */
+void screencapture(void)
+{
+    /* unk_82C24 as the 320x200 path patches it */
+    static const unsigned char header[128] = { 10, 5, 1, 8, 0, 0, 0, 0, 63, 1, 199, 0, 64, 1, 200, 0,
+        0, 0, 0, 8, 8, 8, 16, 16, 16, 24, 24, 24, 32, 32, 32, 40, 40, 40, 48, 48, 48, 56, 56, 56, 64, 64, 64,
+        72, 72, 72, 80, 80, 80, 88, 88, 88, 96, 96, 96, 104, 104, 104, 112, 112, 112, 120, 120, 120, 0, 1, 64,
+        1 };
+    static int capturecount; /* word_23DE58 */
+    const unsigned char *src = framebuffer();
+    char name[16];
+    FILE *fp;
+    int i;
+
+    snprintf(name, sizeof name, "capt%04d.pcx", capturecount++ % 10000);
+    fp = plat_fopen(name, "wb");
+    if (!fp) {
+        capturecount--;
+        return;
+    }
+    fwrite(header, 1, sizeof header, fp);
+    for (i = 0; i < 320 * 200;) {
+        unsigned char c = src[i++];
+        int run = 1;
+
+        while (i < 320 * 200 && src[i] == c && run < 63 && i % 320 != 0) {
+            run++;
+            i++;
+        }
+        if (run > 1 || c >= 192)
+            fputc(0xC0 | run, fp);
+        fputc(c, fp);
+    }
+    fputc(12, fp);
+    for (i = 0; i < 768; i++)
+        fputc((palette[i] >> 2) * 4, fp);
+    if (fclose(fp) != 0)
+        capturecount--;
 }
 
 /* 0x13760. Each record is a palookup number and a 256-byte remap of palookup 0
@@ -113,11 +174,8 @@ int loadpalette(void)
             transluc[257 * i] = (unsigned char)i;
     }
     fclose(fp);
-    for (i = 0; i < 768; i++) {
-        unsigned int v = raw[i];
-        if (v > 63)
-            v = 63;
-        palette[i] = (unsigned char)((v << 2) | (v >> 4));
-    }
+    for (i = 0; i < 768; i++)
+        vgapalette[i] = (unsigned char)(raw[i] > 63 ? 63 : raw[i]);
+    setbrightness(curbrightness);
     return 0;
 }
