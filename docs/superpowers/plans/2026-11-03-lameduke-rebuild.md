@@ -134,7 +134,12 @@ The unchecked steps below retain the original verification detail; completion wa
 - From frame 356 (sample 466, when camera 6 releases the view), the original shows the player's underwater view with a near-level horizon and a visible pistol. The port shows `horiz` near 46 and no weapon.
 - A disposable copy of `D3D.EXE` had its SE 27 demo-camera test patched at file offset `0x3E49F` (2 to 3), so that copy always shows the player view. With that copy, distant troopers drift from about frame 21, and by about frame 160 the original has dead troopers that the port does not. SE 27 also sets `cameraspr`, which CON `ifp pfacing` reads, so a comparison against the patched copy must disable SE 27 in the port the same way.
 - The following were checked against the original and match: krand use in the sound code (there is none), the `processinput` water, landing, movement and look code, zero-tic demo samples (both run every sample, and the original plays count-1 samples), and `newgame` at demo start (`0x1B810`).
-- The next step needs actor state per tic from the original.
+- A disposable `D3D.EXE` patched to write its state at the end of every `domovethings` (seed, player position and `horiz`, all sprites, `hittype`, and the stat lists) gives a per-tic trace to compare against the port's. Three fixes made the whole of demo 1 match:
+  - The shot spawn z offsets in `shoot` were wrong.
+  - `furthestangle` (`0x403B0`) passes one variable as both `hitsect` and `hitsprite`. Every wall hit therefore clears `hitsect`, and the last wall crossed wins, not the nearest.
+  - In `hitscan` a farther floor or ceiling crossing falls through to the wall tests, and the hit point is multiplied in 32 bits before the divide.
+- The remaining differences cannot affect play. Shell casings (pic 1165) advance their frame in `animatesprites`, so they depend on how many frames were drawn. A missed hitscan spawns a sprite in sector -1 from uninitialised stack values, and that sprite is deleted on the next tic.
+- The trace next differs about 212 tics into the second attract demo. The pistol missing from the underwater view has not been re-checked against the screenshots.
 
 - [ ] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
 - [ ] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").
