@@ -2765,7 +2765,7 @@ void draw2dgrid(int x, int y, short ang, int zoom, short gride)
                     frame[pageoffset + 640 * r + sx] = 8;
         }
     for (i = -65536; i <= 65536; i += 2048 >> gride) {
-        int sy = (zoom * (y - i)) >> 14;
+        int sy = (int)(((long long)zoom * (y - i)) >> 14);
 
         if (sy != last && sy > -200 && sy <= 200) {
             last = sy;

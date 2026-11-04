@@ -13,5 +13,6 @@ FILE *plat_fopen(const char *name, const char *mode);
    (isdir 1 for a directory); plat_chdir changes it. 0 on success. */
 int plat_listdir(void (*fn)(const char *name, int isdir, void *ctx), void *ctx);
 int plat_chdir(const char *dir);
+int plat_getcwd(char *buf, int len);
 
 #endif

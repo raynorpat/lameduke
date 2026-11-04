@@ -120,6 +120,13 @@ static short numboardextra;
 static unsigned char boardextra[MAXSPRITES][10];
 unsigned char boardhadextra;
 
+/* A new board has no closing records. */
+void newboardextra(void)
+{
+    numboardextra = 0;
+    boardhadextra = 0;
+}
+
 int loadboard(const char *filename)
 {
     FILE *fp;

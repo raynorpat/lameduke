@@ -186,10 +186,10 @@ void clearview(int32_t col)
 }
 
 /* With pageoffset 0 the offset counts eight-pixel groups into the status
-   bar at the frame's start; otherwise it is a pixel offset. */
+   bar at the frame's start; otherwise it is a pixel offset into the page. */
 void fillscreen16(int32_t offset, int32_t color, int32_t blocksize)
 {
-    int32_t p = pageoffset ? offset : offset << 3;
+    int32_t p = pageoffset ? pageoffset + offset : offset << 3;
 
     if (p < 0)
         p = 0;

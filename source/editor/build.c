@@ -247,16 +247,13 @@ static void initcrc(void)
 }
 
 
+/* LameDuke: the working directory, where the game data and maps are; the
+   1994 BUILD.EXE sat beside them, so its own folder was the same place. */
 void initmenupaths(char *filename)
 {
-	int32_t i;
-
-	strncpy(curpath,filename,sizeof(curpath)-1);
-	curpath[sizeof(curpath)-1] = 0;
-	i = 0;
-	while ((i < (int32_t)sizeof(curpath)) && (curpath[i] != 0)) i++;
-	while ((i > 0) && (curpath[i] != 92) && (curpath[i] != '/')) i--;
-	curpath[i] = 0;
+	(void)filename;
+	if (plat_getcwd(curpath,sizeof(curpath)) != 0)
+		strcpy(curpath,".");
 	strcpy(menupath,curpath);
 }
 
@@ -997,7 +994,7 @@ int menuselect(void)
 			{
 				i = 0;
 				while ((i < (int32_t)sizeof(menupath)) && (menupath[i] != 0)) i++;
-				while ((i > 0) && (menupath[i] != 92)) i--;
+				while ((i > 0) && (menupath[i] != 92) && (menupath[i] != '/')) i--;
 				menupath[i] = 0;
 				plat_chdir(menuname[newhighlight]);
 			}
@@ -2037,6 +2034,10 @@ Remove empty sector records and search for valid sectors for misplaced sprites.
 A candidate must contain the sprite XY and pass the sprite-height Z tests.
 ================
 */
+/* LameDuke: a wall or sprite copied with Tab has no pal in v5, so pasting
+   it leaves a sector's pal alone; a copied ceiling or floor brings its own. */
+#define TABPAL(cur) (((somethingintab == 1) || (somethingintab == 2)) ? (unsigned char)temppal : (cur))
+
 /* LameDuke: where each sprite was when the map loaded. Shipped maps place
    some sprites (effectors among them) outside the sector they belong to,
    so fixspritesectors only re-sectors the ones moved or made since. */
@@ -2907,10 +2908,7 @@ void overheadeditor(void)
 				linehighlight = getlinehighlight(mousxplc, mousyplc);
 
 				if ((pointhighlight&0xc000) == 16384)
-				{
-					sprite[pointhighlight&16383].cstat ^= 256;
-					asksave = 1;
-				}
+					;  /* v5 sprites have no hitscan bit 256 */
 				else if (linehighlight >= 0)
 				{
 					wall[linehighlight].cstat ^= 64;
@@ -4639,6 +4637,7 @@ void overheadeditor(void)
 							cursectnum = -1;
 							initspritelists();
 							strcpy(boardfilename,"newboard.map");
+							newboardextra();
 							showtitle(0);
                             asksave = 0;  /* rcg09032000 my add. */
 							break;
@@ -5662,13 +5661,13 @@ void editinput(void)
 					if (searchstat == 0) wall[searchwall].shade = tempshade;
 					if (searchstat == 1)
 					{
-						sector[searchsector].ceilingshade = tempshade, sector[searchsector].ceilingpal = temppal;
+						sector[searchsector].ceilingshade = tempshade, sector[searchsector].ceilingpal = TABPAL(sector[searchsector].ceilingpal);
 						if ((somethingintab == 1) || (somethingintab == 2))
 							sector[searchsector].visibility = tempvis;
 					}
 					if (searchstat == 2)
 					{
-						sector[searchsector].floorshade = tempshade, sector[searchsector].floorpal = temppal;
+						sector[searchsector].floorshade = tempshade, sector[searchsector].floorpal = TABPAL(sector[searchsector].floorpal);
 						if ((somethingintab == 1) || (somethingintab == 2))
 							sector[searchsector].visibility = tempvis;
 					}
@@ -5707,7 +5706,7 @@ void editinput(void)
 					{
 						sector[i].ceilingpicnum = temppicnum;
 						sector[i].ceilingshade = tempshade;
-						sector[i].ceilingpal = temppal;
+						sector[i].ceilingpal = TABPAL(sector[i].ceilingpal);
 						if ((somethingintab == 1) || (somethingintab == 2))
 						{
 							sector[i].ceilingxpanning = tempxrepeat;
@@ -5742,7 +5741,7 @@ void editinput(void)
 					{
 						sector[i].floorpicnum = temppicnum;
 						sector[i].floorshade = tempshade;
-						sector[i].floorpal = temppal;
+						sector[i].floorpal = TABPAL(sector[i].floorpal);
 						if ((somethingintab == 1) || (somethingintab == 2))
 						{
 							sector[i].floorxpanning = tempxrepeat;
@@ -5789,7 +5788,7 @@ void editinput(void)
 				{
 					sector[searchsector].ceilingpicnum = temppicnum;
 					sector[searchsector].ceilingshade = tempshade;
-					sector[searchsector].ceilingpal = temppal;
+					sector[searchsector].ceilingpal = TABPAL(sector[searchsector].ceilingpal);
 					if ((somethingintab == 1) || (somethingintab == 2))
 					{
 						sector[searchsector].ceilingxpanning = tempxrepeat;
@@ -5805,7 +5804,7 @@ void editinput(void)
 				{
 					sector[searchsector].floorpicnum = temppicnum;
 					sector[searchsector].floorshade = tempshade;
-					sector[searchsector].floorpal = temppal;
+					sector[searchsector].floorpal = TABPAL(sector[searchsector].floorpal);
 					if ((somethingintab == 1) || (somethingintab == 2))
 					{
 						sector[searchsector].floorxpanning= tempxrepeat;
@@ -6296,17 +6295,12 @@ void editinput(void)
 			}
 			if (searchstat == 4)
 			{
-				if ((wall[searchwall].cstat&128) == 0)
-					wall[searchwall].cstat |= 128;
-				else if ((wall[searchwall].cstat&512) == 0)
-					wall[searchwall].cstat |= 512;
-				else
-					wall[searchwall].cstat &= ~(128+512);
+				wall[searchwall].cstat ^= 128;  /* one translucency: draw.c tests 0x80 only */
 
 				if (wall[searchwall].nextwall >= 0)
 				{
-					wall[wall[searchwall].nextwall].cstat &= ~(128+512);
-					wall[wall[searchwall].nextwall].cstat |= (wall[searchwall].cstat&(128+512));
+					wall[wall[searchwall].nextwall].cstat &= ~128;
+					wall[wall[searchwall].nextwall].cstat |= (wall[searchwall].cstat&128);
 				}
 				asksave = 1;
 			}
@@ -6417,10 +6411,7 @@ void editinput(void)
 		if (keystatus[0x23] > 0)  /* H (hitscan sensitivity) */
 		{
 			if (searchstat == 3)
-			{
-				sprite[searchwall].cstat ^= 256;
-				asksave = 1;
-			}
+				;  /* v5 sprites have no hitscan bit 256 */
 			else
 			{
 				wall[searchwall].cstat ^= 64;

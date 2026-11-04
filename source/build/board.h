@@ -81,6 +81,7 @@ int saveboard(const char *filename, int px, int py, int pz, short startang, shor
    the loaded board had one (boardhadextra), so an unedited map comes back
    byte for byte. */
 extern unsigned char boardhadextra;
+void newboardextra(void);
 int writeboard(const char *filename, int px, int py, int pz, short startang, short startsect);
 /* Reports each broken wall loop, unpaired nextwall/nextsector, sprite
    outside a real sector, and a start outside its sector; returns the count.

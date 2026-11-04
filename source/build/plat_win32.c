@@ -30,3 +30,8 @@ int plat_chdir(const char *dir)
 {
     return _chdir(dir);
 }
+
+int plat_getcwd(char *buf, int len)
+{
+    return _getcwd(buf, len) ? 0 : -1;
+}

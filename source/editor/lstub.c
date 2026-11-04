@@ -15,6 +15,11 @@ void printmessage16(char name[82]);
 void printmessage256(char name[82]);
 extern char names[MAXTILES][17];
 
+static const char *tilename(short pic)
+{
+    return (pic >= 0 && pic < MAXTILES) ? names[pic] : "";
+}
+
 typedef struct {
     int tag;
     const char *name;
@@ -163,10 +168,10 @@ const char *ExtGetSpriteCaption(short spritenum)
     if (s->picnum == 175)
         snprintf(caption, sizeof caption, "SE %hu%s%s,%hu", (unsigned short)s->lotag, n ? " " : "", n ? n : "",
             (unsigned short)s->hitag);
-    else if (names[s->picnum][0] && (s->lotag | s->hitag) == 0)
-        snprintf(caption, sizeof caption, "%s", names[s->picnum]);
-    else if (names[s->picnum][0])
-        snprintf(caption, sizeof caption, "%s %hu,%hu", names[s->picnum], (unsigned short)s->lotag,
+    else if (tilename(s->picnum)[0] && (s->lotag | s->hitag) == 0)
+        snprintf(caption, sizeof caption, "%s", tilename(s->picnum));
+    else if (tilename(s->picnum)[0])
+        snprintf(caption, sizeof caption, "%s %hu,%hu", tilename(s->picnum), (unsigned short)s->lotag,
             (unsigned short)s->hitag);
     else if ((s->lotag | s->hitag) == 0)
         caption[0] = 0;
@@ -205,7 +210,7 @@ void ExtShowSpriteData(short spritenum)
     const char *n = sprite[spritenum].picnum == 175 ? SENAME(sprite[spritenum].lotag) : NULL;
 
     snprintf(caption, sizeof caption, "Sprite %d: %s%s%s", spritenum,
-        names[sprite[spritenum].picnum][0] ? names[sprite[spritenum].picnum] : "tile", n ? " " : "", n ? n : "");
+        tilename(sprite[spritenum].picnum)[0] ? tilename(sprite[spritenum].picnum) : "tile", n ? " " : "", n ? n : "");
     say();
 }
 
@@ -223,11 +228,12 @@ void ExtCheckKeys(void)
     editinput();
     /* the heightmap tool's state for the floor under the cursor */
     if (searchstat == 2 && (sector[searchsector].floorstat & 2)) {
-        short t = sector[searchsector].floorheinum;
+        short t = sector[searchsector].floorheinum, c = sector[searchsector].floorpicnum;
 
-        /* draw.c reads the heights as a 64x64 grid */
-        snprintf(caption, sizeof caption, "Heightmap: height tile %d%s ([ off, ] pick)", t,
-            (t >= 0 && t < MAXTILES && tilesizx[t] == 64 && tilesizy[t] == 64) ? "" : " NOT 64x64");
+        /* draw.c reads both the heights and the floor picture as 64x64 grids */
+        snprintf(caption, sizeof caption, "Heightmap: height tile %d%s%s ([ off, ] pick)", t,
+            (t >= 0 && t < MAXTILES && tilesizx[t] == 64 && tilesizy[t] == 64) ? "" : " NOT 64x64",
+            (c >= 0 && c < MAXTILES && tilesizx[c] == 64 && tilesizy[c] == 64) ? "" : ", floor NOT 64x64");
         printmessage256(caption);
     }
 }

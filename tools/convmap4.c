@@ -147,6 +147,12 @@ int main(int argc, char **argv)
     numsectors = ns;
     numwalls = nw;
     numsprites = np;
+    /* kept as the v4 data has them, but said: the shipped N8 has M8's start */
+    if (inside(s32(4), s32(8), (short)s16(18)) != 1)
+        printf("note: the start (%d,%d) is not inside its sector %d; kept\n", s32(4), s32(8), s16(18));
+    for (i = 0; i < np; i++)
+        if (sprite[i].sectnum < 0 || sprite[i].sectnum >= ns)
+            printf("note: sprite %d is in sector %d, which does not exist; kept\n", i, sprite[i].sectnum);
     boardhadextra = 0; /* v4 has no extras count */
     if (writeboard(argv[2], s32(4), s32(8), s32(12), (short)s16(16), (short)s16(18)) != 0) {
         fprintf(stderr, "convmap4: cannot write %s\n", argv[2]);
