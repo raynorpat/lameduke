@@ -141,7 +141,14 @@ The unchecked steps below retain the original verification detail; completion wa
 - The remaining differences cannot affect play. Shell casings (pic 1165) advance their frame in `animatesprites`, so they depend on how many frames were drawn. A missed hitscan spawns a sprite in sector -1 from uninitialised stack values, and that sprite is deleted on the next tic.
 - Demo playback ends where the exe's catch-up loop (`0x15E4E`) ends. The exe stops after a frame once it reaches count-1 samples, and a zero-tic sample always runs on into the next one. So demo 1 plays all 2959 samples and demo 2 plays 212 of its 213.
 - `movesprite` in sector -1 reads `sector[-1]`, which is the last 37 bytes of `sprite[4095]`.
-- With these changes the port matches all 3511 traced tics: demo 1, demo 2, and the first 340 tics of demo 3. The pistol missing from the underwater view has not been re-checked against the screenshots.
+- A second trace covered the whole attract cycle: 20212 tics, demos 1 to 7 and then demo 0. Four more fixes made all of it match:
+  - A moving sector (`0x1CBAB`) compares the sign-extended sector hitag with `0xFFFF`. That is never equal, so it carries sprites even in hitag -1 sectors.
+  - On a miss, `checkhitceiling` clears only `al`, and its callers test all of `eax`. So a miss in a sector with a nonzero hitag counts as a hit, and a shot above the ceiling stays where it is.
+  - The premap gives `DOORSHOCK` (1123) `cstat |= 1`, shade -12 and stat 1.
+  - `processinput` looks right on bit 7 of the sync bits, not bit 31. Bit 31 opens the menu in `playerkeys`.
+- The demo frame (`0x15FC3`) and the level frame (`0x18DAD`) both draw tile 481, the logo, translucent at (268, 156) over every camera view.
+- The pistol was never missing. The player drowns in demo 1 (health 0 from tic 526 to 578), and that is when the camera releases the view.
+- The exe redraws while it waits for its clock, so a few fields depend on how many frames it drew: shell casing frames (pic 1165), the SE 27 camera `yvel` clamp, and the viewscreen's owner and frame counter (1408). The comparison masks these, along with the sector -1 sprite that a missed hitscan spawns from leftover stack values.
 
 - [ ] **Step 1: In IDA,** confirm the attract order (which demo index plays first and how it wraps). The tree starts at 1 and wraps at 8.
 - [ ] **Step 2: Implement.** Playback calls `game_tic` with the recorded bytes, and bits are masked by `0xFFE7FFFF`. `/r` records through the same path. Pacing stays per spec ("Left to the builder").
