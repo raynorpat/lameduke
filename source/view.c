@@ -771,4 +771,7 @@ void displayrooms(short p)
         displaystatus(p);
         displayquotes(p);
     }
+    /* 0x15FC3, 0x18DAD: a camera view carries the translucent logo. */
+    if (cameraspr >= 0)
+        rotatesprite(268, 156, 481, 0, 4, 0);
 }
