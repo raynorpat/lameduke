@@ -99,8 +99,18 @@ static void present(void)
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *at = getenv("LAMEDUKE_FRAME_AT");
 
-    if (sintable() && palookup[0])
+    if (sintable() && palookup[0]) {
+        playertype *pl = &ps[screenpeek];
+
         displayrooms(screenpeek);
+        if (pl->gm & 1) {
+            pl->gm &= ~0x10;
+            menus();
+        }
+        /* 0x15FC3, 0x18DAD: a camera view carries the translucent logo. */
+        if (cameraspr >= 0)
+            rotatesprite(268, 156, 481, 0, 4, 0);
+    }
     pansounds();
     platform_present(framebuffer(), xdim, ydim);
     presented++;
@@ -124,6 +134,23 @@ static int demo_hz(const demo_t *demo)
     return 720;
 }
 
+/* How a demo or a level hands back to main. */
+enum { PLAY_DONE, PLAY_CLOSED, PLAY_QUIT, PLAY_NEXTDEMO, PLAY_LEVEL, PLAY_ATTRACT };
+
+/* A demo frame ends on gm: 0x80 quits, and once a new game or a restore
+   sets bit 2's neighbour 4, bit 2 (the Demo item) still means the next
+   demo (0x16007). */
+static int demo_outcome(void)
+{
+    int gm = ps[screenpeek].gm;
+
+    if (gm == 0x80)
+        return PLAY_QUIT;
+    if (gm & 4)
+        return (gm & 2) ? PLAY_NEXTDEMO : PLAY_LEVEL;
+    return PLAY_DONE;
+}
+
 static int play_demo(const demo_t *demo)
 {
     int i;
@@ -137,7 +164,7 @@ static int play_demo(const demo_t *demo)
         int tics = demo->tics[i];
 
         if (input_poll())
-            return 1;
+            return PLAY_CLOSED;
         syncfvel[0] = (signed char)signed_byte(demo->forward[i]);
         syncsvel[0] = (signed char)signed_byte(demo->strafe[i]);
         syncavel[0] = (signed char)signed_byte(demo->turn[i]);
@@ -153,7 +180,15 @@ static int play_demo(const demo_t *demo)
            and zero-tic samples always run on into the next one. */
         if (i + 1 >= demo->count - 1)
             break;
+        /* 0x15F51: in the attract loop Esc opens the main menu. */
+        if (keystatus[0x01]) {
+            keystatus[0x01] = 0;
+            menupage = 0;
+            ps[screenpeek].gm |= 1;
+        }
         present();
+        if (demo_outcome() != PLAY_DONE)
+            return demo_outcome();
         if (shot && shot[0])
             continue;
         remainder += tics * 1000;
@@ -161,11 +196,11 @@ static int play_demo(const demo_t *demo)
         remainder %= hz;
         while ((int32_t)(deadline - timer_ticks()) > 0) {
             if (input_poll())
-                return 1;
+                return PLAY_CLOSED;
             SDL_Delay(1);
         }
     }
-    return 0;
+    return PLAY_DONE;
 }
 
 static int play_level(void)
@@ -200,18 +235,73 @@ static int play_level(void)
         steps = irqs * per_irq;
         if (steps > 255)
             steps = 255;
-        input_sample(steps, &fv, &sv, &av, &bits);
+        /* getinput 0x30E60 gives nothing while the menu is open. */
+        if (ps[myconnectindex].gm & 1) {
+            input_clear();
+            fv = sv = av = bits = 0;
+        } else {
+            input_sample(steps, &fv, &sv, &av, &bits);
+        }
         syncfvel[0] = (signed char)fv;
         syncsvel[0] = (signed char)sv;
         syncavel[0] = (signed char)av;
         syncbits[0] = bits;
         synctics = (unsigned char)steps;
         domovethings();
-        /* pending: gm bit 0 opens the menus and help pages (Task 9); dropped until then */
-        ps[myconnectindex].gm &= ~1;
+        /* 0x17411: an exit sets bit 3, and the next level starts. */
+        if (ps[screenpeek].gm & 8) {
+            ps[screenpeek].level++;
+            enterlevel(4);
+            continue;
+        }
         present();
+        /* 0x17482: Quit to Main Menu, then 0x16036: Quit */
+        if (ps[screenpeek].gm & 2)
+            return PLAY_ATTRACT;
+        if (ps[screenpeek].gm & 0x80)
+            return PLAY_QUIT;
     }
-    return 1;
+    return PLAY_CLOSED;
+}
+
+static void show(void)
+{
+    pansounds();
+    platform_present(framebuffer(), xdim, ydim);
+}
+
+/* 0x1749E. Unless /d is on or the player left for the main menu, a score
+   that makes the table asks for a quote, and the table stays up until Esc,
+   Space or Enter. Then the demo and userdefs.tmp are written. */
+static void quitgame(void)
+{
+    if (!debugmode && !(ps[screenpeek].gm & 2)) {
+        int slot = newscore();
+
+        if (slot >= 0) {
+            int done = 0;
+
+            while (!done) {
+                if (input_poll())
+                    break;
+                drawview(screenpeek);
+                drawscores();
+                done = getscorename(slot);
+                show();
+            }
+            memcpy(scorenames[slot], typebuf, 31);
+        }
+        do {
+            if (input_poll())
+                break;
+            drawview(screenpeek);
+            drawscores();
+            show();
+        } while (!keystatus[0x01] && !keystatus[0x39] && !keystatus[0x1C]);
+    }
+    demo_write();
+    save_user_stats();
+    errorexit("Game Over, or is it?");
 }
 
 int main(int argc, char **argv)
@@ -239,7 +329,6 @@ int main(int argc, char **argv)
     }
 
     puts("Init engine...");
-    menus_init();
     initengine();
     timer_init();
 
@@ -276,33 +365,45 @@ int main(int argc, char **argv)
     if (game_level_set) {
         newgame(game_volume, game_level, game_skill);
         enterlevel(4);
-        play_level();
-        demo_write();
-    } else {
-        int index = 1;
-        while (!input_poll()) {
-            demo_t demo;
-            if (demo_load(index, &demo) != 0)
-                errorexit("Demo not found.");
-            game_volume = demo.volume;
-            game_level = demo.level;
-            game_skill = demo.skill;
-            /* 0x1B810 starts a new game from each demo's header. */
-            newgame(game_volume, game_level, game_skill);
-            enterlevel(2);
-            demomode = 2;
-            if (play_demo(&demo)) {
-                demomode = 0;
-                demo_free(&demo);
-                break;
-            }
-            demo_free(&demo);
-            index++;
-            if (index == 8)
-                index = 0;
-        }
     }
+    for (;;) {
+        int r = PLAY_LEVEL;
 
+        if (!game_level_set) {
+            int index = 1;
+
+            for (;;) {
+                demo_t demo;
+
+                if (demo_load(index, &demo) != 0)
+                    errorexit("Demo not found.");
+                /* 0x1B810 starts a new game from each demo's header. */
+                newgame(demo.volume, demo.level, demo.skill);
+                enterlevel(2);
+                demomode = 2;
+                r = play_demo(&demo);
+                demo_free(&demo);
+                if (r == PLAY_CLOSED || r == PLAY_QUIT || r == PLAY_LEVEL)
+                    break;
+                index++;
+                if (index == 8)
+                    index = 0;
+            }
+            /* 0x16026 */
+            demomode = 0;
+        }
+        game_level_set = 0;
+        if (r == PLAY_LEVEL)
+            r = play_level();
+        if (r == PLAY_ATTRACT)
+            continue;
+        if (r == PLAY_QUIT)
+            quitgame();
+        break;
+    }
+    /* the window was closed */
+    demo_write();
+    save_user_stats();
     platform_shutdown();
     platform_quit();
     return 0;

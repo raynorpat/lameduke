@@ -13,6 +13,7 @@
 #include "tiles.h"
 #include "sounds.h"
 #include "premap.h"
+#include "sdl_input.h"
 
 /* byte_82364. The knee's frame list, shared with the trigger in player.c. */
 extern const unsigned char kickframes[6][20];
@@ -498,6 +499,103 @@ int gametext(int x, int y, const char *s, int shade)
     return x;
 }
 
+/* byte_11D3E0 and byte_1257C2: the line being typed. A typed character is
+   not followed by a 0; only backspace writes one. */
+char typebuf[160];
+unsigned char typebuflen;
+
+/* 0x12A40: type into typebuf, at most maxlen, and draw it at (x, y): the
+   big font when shade has bit 7, else the small one, then the cursor in 3D
+   mode. Backspace's key byte counts the tics it has been held. Returns
+   nonzero on Enter. */
+int strget(int x, int y, int shade, int maxlen)
+{
+    static const unsigned char normal[128] = { /* byte_82738 */
+        0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
+        'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0, 0, 'a', 's',
+        'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, 92, 'z', 'x', 'c', 'v',
+        'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
+        '2', '3', '0', '.',
+    };
+    static const unsigned char shifted[128] = { /* byte_827B8 */
+        0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
+        'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0, 0, 'A', 'S',
+        'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|', 'Z', 'X', 'C', 'V',
+        'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
+        '2', '3', '0', '.',
+    };
+    const unsigned char *p = (const unsigned char *)typebuf;
+    playertype *pl = &ps[screenpeek];
+    int i, left = x, pic = -1, pal;
+
+    for (i = 0; i < 128; i++) {
+        if (!keystatus[i])
+            continue;
+        if (keystatus[0x2A] | keystatus[0x36]) {
+            if (shifted[i]) {
+                if (typebuflen < 79)
+                    typebuf[typebuflen++] = (char)shifted[i];
+                keystatus[i] = 0;
+            }
+        } else if (normal[i]) {
+            if (typebuflen < 159)
+                typebuf[typebuflen++] = (char)normal[i];
+            keystatus[i] = 0;
+        }
+        if (maxlen < typebuflen)
+            typebuflen = (unsigned char)maxlen;
+        if (keystatus[0x0E]) {
+            if ((keystatus[0x0E] == 1 || keystatus[0x0E] == 60) && typebuflen)
+                typebuflen--;
+            typebuf[typebuflen] = 0;
+            if (keystatus[0x0E] < 60) {
+                keystatus[0x0E] = (unsigned char)(keystatus[0x0E] + synctics);
+                if (keystatus[0x0E] > 60)
+                    keystatus[0x0E] = 60;
+            }
+        }
+    }
+    if (pl->f02 == 2) {
+        x = 0;
+    } else if (shade & 0x80) {
+        for (; *p; p++) {
+            int dy = 2;
+
+            if (*p == '\n') {
+                x = left;
+                y += 16;
+                continue;
+            }
+            if (*p == ' ') {
+                x += 5;
+                continue;
+            }
+            if (*p >= '0' && *p <= '9')
+                pic = *p + 101;
+            if (*p >= 'a' && *p <= 'z')
+                pic = *p + 26;
+            if (*p >= 'A' && *p <= 'Z') {
+                pic = *p + 32;
+                dy = 0;
+            }
+            if (pic < 0)
+                continue;
+            rotatesprite(x, y + dy, (short)pic, (signed char)(shade & 0x7F), 0, 0);
+            x += tilesizx[pic] + 1;
+        }
+    } else {
+        x = minitext(x, y, typebuf, shade & 0x7F);
+    }
+    if (pl->f02 == 3) {
+        pal = sector[pl->cursectnum].floorpal;
+        rotatesprite(x, y, (short)((shade & 0x80) ? 1022 : 1023), (signed char)shade, 0,
+            (unsigned char)(pal ? pal : pl->ba7));
+    }
+    return keystatus[0x9C] | keystatus[0x1C];
+}
+
 /* 0x13800. */
 void numtext(int x, int y, int value, int shade)
 {
@@ -620,7 +718,7 @@ static void displayquotes(short p)
 }
 
 /* 0x123D0. Shade from the sine table; the index is the counter's low 11 bits. */
-static int hudshade(void)
+int hudshade(void)
 {
     hudpulse = (short)(hudpulse + 0x80);
     return (sintable()[hudpulse & 0x07FF] >> 10) + 16;
@@ -736,7 +834,8 @@ static void updateviewscreen(short p)
 }
 
 /* 0x14050. Draws player p's view, or the demo camera's. */
-void displayrooms(short p)
+/* The view alone, as the quit screens (0x1749E) draw it under the scores. */
+void drawview(short p)
 {
     playertype *pl = &ps[p];
 
@@ -760,6 +859,15 @@ void displayrooms(short p)
     }
     drawmasks();
     reflectfloor();
+}
+
+void displayrooms(short p)
+{
+    playertype *pl = &ps[p];
+
+    drawview(p);
+    if (pl->f02 == 2)
+        return;
     /* Level play draws the weapon, the status bar and the quotes. A monitor
        (w56 >= 0) draws the corners instead: the level frame when gm has bit 2,
        the demo frame always (0x1A420 is the same draw). */
@@ -771,7 +879,4 @@ void displayrooms(short p)
         displaystatus(p);
         displayquotes(p);
     }
-    /* 0x15FC3, 0x18DAD: a camera view carries the translucent logo. */
-    if (cameraspr >= 0)
-        rotatesprite(268, 156, 481, 0, 4, 0);
 }

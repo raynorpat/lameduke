@@ -1,9 +1,14 @@
 #ifndef MENUS_H
 #define MENUS_H
 
-/* 0x3C1C0 is called during startup, before initengine.
-   The same function holds the main menu, episode and in-game menu text. */
+/* 0x3CCF0: the menu page menupage names, drawn over the frame. */
+void menus(void);
 
-void menus_init(void);
+/* aItOnlyLooksPai and dword_82568, kept in userdefs.tmp. */
+extern char scorenames[12][33];
+extern int scores[12];
+void drawscores(void);
+int newscore(void);
+int getscorename(int slot);
 
 #endif

@@ -12,6 +12,7 @@
 #include "math.h"
 #include "tiles.h"
 #include "display.h"
+#include "sdl_input.h"
 #include "draw.h"
 #include "engine.h"
 
@@ -671,7 +672,6 @@ void resetplayer(short p)
     pl->f06 = 768;
 }
 
-unsigned char menucursor; /* byte_1BCA11 */
 int menupage;             /* dword_1252F0: which menu or help screen b8a bit 0 opens */
 
 /* 0x3E0D0. The local player's view window, w4a pixels in from each edge. */
@@ -731,7 +731,7 @@ void playerkeys(short p)
     if (gamepaused)
         return;
     if (bits < 0 && !(pl->gm & 2) && pl->w56 == -1) {
-        menucursor = 0;
+        keystatus[0x01] = 0;
         menupage = 0;
         pl->gm |= 1;
         if (pl->f02 == 2) {

@@ -1,6 +1,5 @@
 #include "demo.h"
 #include "global.h"
-#include "premap.h"
 
 #include "platform.h"
 
@@ -134,14 +133,14 @@ void demo_record(void)
    mydemo_0.dmo for /v1 /l1, otherwise mydemo_1.dmo. */
 void demo_write(void)
 {
-    int slot = (game_volume == 0 && game_level == 0) ? 0 : 1;
+    int slot = (ps[0].volume == 0 && ps[0].level == 0) ? 0 : 1;
 
     if (demomode != 1)
         return;
     rec.count--;
-    rec.volume = (unsigned char)game_volume;
-    rec.level = (unsigned char)game_level;
-    rec.skill = (unsigned char)game_skill;
+    rec.volume = ps[0].volume;
+    rec.level = ps[0].level;
+    rec.skill = ps[0].skill;
     if (demo_save(slot, &rec) == 0)
         printf("Wrote mydemo_%d.dmo\n", slot);
 }

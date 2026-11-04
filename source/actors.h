@@ -21,7 +21,6 @@ void checksectors(short p);
 extern short neartagsector, neartagwall, neartagsprite;
 extern int neartaghitdist;
 void viewsize(short p);
-extern unsigned char menucursor;
 extern int menupage;
 
 int getincangle(int a, int na, int shift);
