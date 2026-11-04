@@ -2190,7 +2190,9 @@ static void movetrain(short i, short sect, short lotag)
     for (j = headspritesect[sect]; j >= 0; j = nextspritesect[j]) {
         short pic = sprite[j].picnum;
 
-        if (pic == 175 || pic == 34 || pic == 283 || sector[sect].hitag == -1)
+        /* 0x1CBAB compares the sign-extended hitag with 0xFFFF, so hitag -1
+           never skips a sprite here. */
+        if (pic == 175 || pic == 34 || pic == 283)
             continue;
         rotatepoint(s->x, s->y, sprite[j].x, sprite[j].y, (short)dang, &sprite[j].x, &sprite[j].y);
         sprite[j].x += (s->xvel * sintable()[(s->ang + 512) & 2047]) >> 14;
