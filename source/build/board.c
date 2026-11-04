@@ -985,16 +985,24 @@ int movesprite(short s, int xchange, int ychange, int zchange, int walldist, int
     spritetype *spr = &sprite[s];
     short sect = spr->sectnum;
     int z = spr->z - 2 * tilesizy[spr->picnum] * spr->yrepeat;
-    int retval;
+    int retval, cz, fz;
 
     retval = clipmove(&spr->x, &spr->y, &z, &sect, (xchange * tics) << 11, (ychange * tics) << 11,
         walldist, ceildist, flordist, cliptype);
     if (sect != spr->sectnum && sect >= 0)
         changespritesect(s, sect);
     z = ((tics * zchange) >> 3) + spr->z;
-    if (sect < 0)
-        return retval; /* the exe reads sector[-1] here */
-    if (z <= sector[sect].ceilingz || z > sector[sect].floorz) {
+    if (sect >= 0) {
+        cz = sector[sect].ceilingz;
+        fz = sector[sect].floorz;
+    } else {
+        /* The exe reads sector[-1], the last 37 bytes of sprite[MAXSPRITES - 1]. */
+        const unsigned char *b = (const unsigned char *)&sprite[MAXSPRITES - 1] + 1;
+
+        memcpy(&cz, b + 12, 4);
+        memcpy(&fz, b + 16, 4);
+    }
+    if (z <= cz || z > fz) {
         if (retval == 0)
             return sect + 0x4000;
     } else {
