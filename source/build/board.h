@@ -72,6 +72,7 @@ extern short cursectnum;
 
 /* 0 on a version-5 board that is fully consumed. -1 otherwise. */
 int loadboard(const char *filename);
+int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect);
 
 /* 0x4B977. 1 when (x,y) is inside the sector, 0 when it is not, -1 if sect is invalid. */
 int inside(int x, int y, short sect);

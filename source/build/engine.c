@@ -38,8 +38,9 @@ void errorexit(const char *msg)
 {
     if (msg && msg[0])
         puts(msg);
-    /* 0x10C60 also tears down the timer and video before leaving. */
-    exit(1);
+    /* 0x10C60 also tears down the timer and video, and prints a CP437 bar
+       above the message, before exit(0). */
+    exit(0);
 }
 
 void initengine(void)

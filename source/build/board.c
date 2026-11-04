@@ -109,6 +109,11 @@ int insertsprite(short sectnum, short statnum)
     return insertspritesect(sectnum);
 }
 
+/* word_23DE7A and unk_1BCF10: 10-byte records that close a board. Nothing
+   reads them; saveboard writes them back. */
+static short numboardextra;
+static unsigned char boardextra[MAXSPRITES][10];
+
 int loadboard(const char *filename)
 {
     FILE *fp;
@@ -166,16 +171,17 @@ int loadboard(const char *filename)
        returns 0 and the count stays as it was, so the board still loads. */
     if (fread(&nextra, 2, 1, fp) != 1)
         nextra = 0;
-    if (nextra < 0) {
+    if (nextra < 0 || nextra > MAXSPRITES) {
         fclose(fp);
         free_board();
         return -1;
     }
-    if (fseek(fp, (long)nextra * 10L, SEEK_CUR) != 0) {
+    if (nextra && fread(boardextra, 10, (size_t)nextra, fp) != (size_t)nextra) {
         fclose(fp);
         free_board();
         return -1;
     }
+    numboardextra = nextra;
     i = fgetc(fp);
     fclose(fp);
     if (i != EOF) {
@@ -194,6 +200,44 @@ int loadboard(const char *filename)
     ang = startang;
     cursectnum = startsect;
     return 0;
+}
+
+/* 0x49337: version 5, the start, the sectors and walls, every sprite with
+   a status below 1024 in status order, and the closing records. */
+int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect)
+{
+    FILE *fp = plat_fopen(filename, "wb");
+    int version = 5, s;
+    short n = 0, nsec = (short)numsectors, nwal = (short)numwalls;
+
+    if (!fp)
+        return -1;
+    fwrite(&version, 4, 1, fp);
+    fwrite(&px, 4, 1, fp);
+    fwrite(&py, 4, 1, fp);
+    fwrite(&pz, 4, 1, fp);
+    fwrite(&startang, 2, 1, fp);
+    fwrite(&startsect, 2, 1, fp);
+    fwrite(&nsec, 2, 1, fp);
+    fwrite(sector, sizeof(sectortype), (size_t)nsec, fp);
+    fwrite(&nwal, 2, 1, fp);
+    fwrite(wall, sizeof(walltype), (size_t)nwal, fp);
+    for (s = 0; s < MAXSTATUS; s++) {
+        short i;
+
+        for (i = headspritestat[s]; i != -1; i = nextspritestat[i])
+            n++;
+    }
+    fwrite(&n, 2, 1, fp);
+    for (s = 0; s < MAXSTATUS; s++) {
+        short i;
+
+        for (i = headspritestat[s]; i != -1; i = nextspritestat[i])
+            fwrite(&sprite[i], sizeof(spritetype), 1, fp);
+    }
+    fwrite(&numboardextra, 2, 1, fp);
+    fwrite(boardextra, 10, (size_t)numboardextra, fp);
+    return fclose(fp) == 0 ? 0 : -1;
 }
 
 int inside(int x, int y, short sect)

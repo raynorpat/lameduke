@@ -2443,3 +2443,77 @@ void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char
         }
     }
 }
+
+/* 0x56C60. picnum centred on (sx, sy) in 16.16, scaled by z/65536 and turned
+   by a, clipped to the window. Texels go to the screen unshaded; 255 is
+   see-through. */
+void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
+{
+    int xs, ys, half, cosa, sina, step, ucos, usin, x0, y0, ex, ey, lo, hi, t, x1, x2, x, ycent;
+
+    if (z <= 16 || (tilesizx[picnum] | tilesizy[picnum]) == 0)
+        return;
+    if (picanm[picnum] & 0xC0)
+        picnum = (short)(picnum + animateoffs(picnum));
+    xs = tilesizx[picnum];
+    ys = tilesizy[picnum];
+    half = (int)(((long long)(xs + ys) * z) >> 1);
+    if (half + sx < 0 || half + sy < 0 || sx - half > 320 << 16 || sy - half > 200 << 16)
+        return;
+    sina = sintable()[(a + 2048) & 2047];
+    cosa = sintable()[(a + 2560) & 2047];
+    step = (int)((65536LL << 16) / z);
+    ucos = (int)(((long long)step * cosa) >> 14);
+    usin = (int)(((long long)step * sina) >> 14);
+    /* the rotated top-left corner */
+    x0 = sx - (int)(((long long)z * (xs * cosa - ys * sina)) >> 15);
+    y0 = sy - (int)(((long long)z * (xs * sina + ys * cosa)) >> 15);
+    /* the columns the rotated edges can reach */
+    ex = (int)(((long long)z * (xs * cosa)) >> 22);
+    ey = (int)(((long long)z * (ys * -sina)) >> 22);
+    lo = ex < 0 ? ex - 1 : 0;
+    hi = ex > 0 ? ex + 1 : 0;
+    if (ey < lo)
+        lo = ey - 1;
+    if (ey > hi)
+        hi = ey + 1;
+    t = ex + ey;
+    if (t < lo)
+        lo = t - 1;
+    if (t > hi)
+        hi = t + 1;
+    x1 = (x0 >> 16) + lo;
+    x2 = (x0 >> 16) + hi;
+    if (x1 < 0)
+        x1 = 0;
+    if (x2 >= 320)
+        x2 = 319;
+    if (x1 > x2 || !waloff[picnum])
+        return;
+    setgotpic(picnum);
+    ycent = 100 - ((windowy1 + windowy2 + 1) >> 1);
+    for (x = x1; x <= x2; x++) {
+        int y, ytop, ybot, dx = (x << 16) - x0;
+
+        if (x < windowx1 || x > windowx2)
+            continue;
+        ytop = startumost[x - windowx1] - ycent;
+        ybot = startdmost[x - windowx1] - ycent - 1;
+        if (ytop < 0)
+            ytop = 0;
+        if (ybot > 199)
+            ybot = 199;
+        for (y = ytop; y <= ybot; y++) {
+            int dy = (y << 16) - y0;
+            int tv = (int)(((long long)dy * ucos - (long long)dx * usin) >> 16);
+            int tu = (int)(((long long)dy * usin + (long long)dx * ucos) >> 16);
+            unsigned char c;
+
+            if (tu < 0 || tu >= xs << 16 || tv < 0 || tv >= ys << 16)
+                continue;
+            c = waloff[picnum][(tu >> 16) * ys + (tv >> 16)];
+            if (c != 255)
+                frame[y * pitch() + x] = c;
+        }
+    }
+}

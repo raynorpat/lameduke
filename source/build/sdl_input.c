@@ -6,9 +6,12 @@
 static int quit;
 static int mouse_x;
 static int mouse_y;
+static int mouse_buttons;
 
 /* byte_1BCA10: one byte per PC scancode, 0x80 and up for the E0-prefixed keys. */
-static unsigned char keystatus[256];
+unsigned char keystatus[256];
+
+int mousesens = 128; /* word_1257B7, from userdefs.tmp (128 without one) */
 
 /* PC scancode set 1 for an SDL scancode; 0 when the DOS keyboard has none. */
 static int dos_scancode(SDL_Scancode s)
@@ -88,16 +91,22 @@ int input_poll(void)
         else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) {
             int sc = dos_scancode(event.key.keysym.scancode);
 
-            /* pending: Esc opens the menus (Task 9); until then it quits */
-            if (event.type == SDL_KEYDOWN && sc == 0x01)
-                quit = 1;
             if (sc)
                 keystatus[sc] = event.type == SDL_KEYDOWN;
         } else if (event.type == SDL_MOUSEMOTION && SDL_GetRelativeMouseMode()) {
             mouse_x += event.motion.xrel;
             mouse_y += event.motion.yrel;
-        } else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT)
-            SDL_SetRelativeMouseMode(SDL_TRUE);
+        } else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+            int b = event.button.button == SDL_BUTTON_LEFT ? 1 : event.button.button == SDL_BUTTON_RIGHT ? 2 : 0;
+
+            if (event.type == SDL_MOUSEBUTTONDOWN) {
+                mouse_buttons |= b;
+                if (b == 1)
+                    SDL_SetRelativeMouseMode(SDL_TRUE);
+            } else {
+                mouse_buttons &= ~b;
+            }
+        }
     }
     return quit;
 }
@@ -181,10 +190,25 @@ static int syncbits_from_keys(void)
     return (int)bits;
 }
 
+/* 0x53914: the motion since the last read, and the buttons held. */
+void getmousevalues(int *dx, int *dy, int *buttons)
+{
+    *dx = mouse_x;
+    *dy = mouse_y;
+    *buttons = mouse_buttons;
+    mouse_x = 0;
+    mouse_y = 0;
+}
+
+/* getinput 0x30E60 with the menu open: the ramps stop. */
+void input_clear(void)
+{
+    ramp_f = ramp_s = ramp_t = 0;
+}
+
 void input_sample(int steps, int *fvel, int *svel, int *avel, int *bits)
 {
-    /* word_1257B7, the mouse sensitivity in userdefs.tmp (128 without one) */
-    const int sens = 128 + 129;
+    const int sens = mousesens + 129;
     int i;
 
     for (i = 0; i < steps; i++)
