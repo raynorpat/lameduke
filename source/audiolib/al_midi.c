@@ -529,7 +529,8 @@ void AL_ControlChange(int channel, int type, int data)
 /* 0x719CC */
 void AL_ProgramChange(int channel, int patch)
 {
-    if (channel <= PERCUSSION)
+    /* the exe reads past its 174 timbres for a higher patch */
+    if (channel <= PERCUSSION && patch < 174)
         channels[channel].timbre = patch;
 }
 

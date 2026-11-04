@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define NUMSOUNDS 39
 
@@ -37,8 +38,62 @@ static struct {
 
 unsigned char soundon = 1; /* byte_1257AB, from userdefs.tmp (1 without one) */
 
+/* The parsers read a few bytes past a block or track end, as the exe does;
+   this much zeroed slack after each file keeps those reads in the buffer. */
+#define SLACK 16
+
+static unsigned le(const unsigned char *p, int n)
+{
+    unsigned v = 0;
+
+    while (n-- > 0)
+        v = v << 8 | p[n];
+    return v;
+}
+
+/* Every block multivoc's nextblock walks to lies inside the file. */
+static int vocvalid(const unsigned char *p, long len)
+{
+    long at;
+
+    if (len < 26 || memcmp(p, "Creative Voice File", 19) != 0)
+        return 0;
+    for (at = (long)le(p + 20, 2); at < len; ) {
+        int type = p[at];
+        long blen;
+
+        if (type == 0 || type > 9)
+            return 1; /* nextblock stops here */
+        if (at + 4 > len)
+            return 0;
+        blen = (long)le(p + at + 1, 3);
+        if (at + 4 + blen > len || ((type == 1 || type == 6) && blen < 2) || (type == 9 && blen < 12))
+            return 0;
+        at += 4 + blen;
+    }
+    return 1; /* the zeroed slack reads as the terminator */
+}
+
+/* The header and every MTrk chunk MIDI_PlaySong walks lie inside the file. */
+static int midivalid(const unsigned char *p, long len)
+{
+    long at, n;
+
+    if (len < 14 || memcmp(p, "MThd", 4) != 0)
+        return 0;
+    at = 8 + (long)(p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7]);
+    for (n = p[10] << 8 | p[11]; n > 0; n--) {
+        if (at < 0 || at + 8 > len || memcmp(p + at, "MTrk", 4) != 0)
+            return 0;
+        at += 8 + (long)((unsigned)p[at + 4] << 24 | p[at + 5] << 16 | p[at + 6] << 8 | p[at + 7]);
+        if (at > len)
+            return 0;
+    }
+    return 1;
+}
+
 /* 0x3BBD0. Runs after FX_SetupCard and before FX_Init. A file that does
-   not open leaves its sound empty. */
+   not open, or whose blocks run past its end, leaves its sound empty. */
 void loadsounds(void)
 {
     int i;
@@ -53,9 +108,12 @@ void loadsounds(void)
         fseek(fp, 0, SEEK_END);
         len = ftell(fp);
         fseek(fp, 0, SEEK_SET);
-        sounds[i] = (unsigned char *)allocache((int)len);
-        if (sounds[i] && fread(sounds[i], 1, (size_t)len, fp) != (size_t)len)
-            sounds[i] = NULL;
+        sounds[i] = (unsigned char *)allocache((int)len + SLACK);
+        if (sounds[i]) {
+            memset(sounds[i] + len, 0, SLACK);
+            if (fread(sounds[i], 1, (size_t)len, fp) != (size_t)len || !vocvalid(sounds[i], len))
+                sounds[i] = NULL;
+        }
         fclose(fp);
     }
 }
@@ -150,7 +208,7 @@ void pansounds(void)
 }
 
 /* 0x3BC40: read the whole song (into unk_B5810 in the exe) and loop it.
-   A song that does not open leaves the music as it was. */
+   A song that does not open or is cut short leaves the music as it was. */
 void playmusic(const char *fn)
 {
     static unsigned char *song;
@@ -166,8 +224,8 @@ void playmusic(const char *fn)
     fseek(fp, 0, SEEK_END);
     len = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    next = (unsigned char *)malloc((size_t)len);
-    if (!next || fread(next, 1, (size_t)len, fp) != (size_t)len) {
+    next = (unsigned char *)calloc(1, (size_t)len + SLACK);
+    if (!next || fread(next, 1, (size_t)len, fp) != (size_t)len || !midivalid(next, len)) {
         free(next);
         fclose(fp);
         return;

@@ -11,7 +11,7 @@ typedef struct track {
     int delay;
     int active;
     int runningstatus;
-    const unsigned char *start, *pos;
+    const unsigned char *start, *pos, *end;
 } track;
 
 static const midifuncs *funcs;        /* dword_89570 */
@@ -119,7 +119,7 @@ static void midireset(void)
 void MIDI_Service(void)
 {
     track *t;
-    int d1 = 0, d2 = 0;
+    int d1 = 0, d2 = 0, rewinds = 0;
 
     if (!playing)
         return;
@@ -127,15 +127,27 @@ void MIDI_Service(void)
     t = track_head;
     while (t) {
         while (t->active && t->delay == 0) {
-            int ev = *t->pos++, channel, cmd;
+            int ev, channel, cmd;
 
+            /* a track that runs off its chunk ends there; the exe read on */
+            if (t->pos >= t->end) {
+                t->active = 0;
+                numactive--;
+                break;
+            }
+            ev = *t->pos++;
             if (ev == 0xFF) {
                 int type = *t->pos++, len = *t->pos++;
 
+                if (len > t->end - t->pos) {
+                    t->active = 0;
+                    numactive--;
+                    break;
+                }
                 if (type == 0x2F) {
                     t->active = 0;
                     numactive--;
-                } else if (type == 0x51) {
+                } else if (type == 0x51 && len >= 3 && bigendian(t->pos, 3) > 0) {
                     TS_SetTaskRate(60000000 / bigendian(t->pos, 3) * division / 60);
                 }
                 t->pos += len;
@@ -195,7 +207,8 @@ void MIDI_Service(void)
         t = t->next;
         if (numactive == 0) {
             rewindtracks();
-            if (!looping) {
+            /* a song with no delays would loop forever inside one tick */
+            if (!looping || ++rewinds > 1) {
                 playing = 0;
                 return;
             }
@@ -277,6 +290,7 @@ int MIDI_PlaySong(const unsigned char *song, int loop)
         }
         t->start = p + 8;
         p = t->start + bigendian(p + 4, 4);
+        t->end = p;
         t->next = NULL;
         t->prev = track_tail;
         if (track_tail)
