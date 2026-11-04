@@ -2873,9 +2873,9 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
 }
 
 /* Not in the exe's game paths; written for build.c. Text in the two
-   TABLES.DAT fonts: 0 is 8x8 (offset 8832), 1 the 4x6 small font (offset
-   9856), 8 bytes a character, top bit leftmost. A negative backcol leaves
-   the background. */
+   TABLES.DAT fonts: 0 is 8x8 (offset 8832, top bit leftmost), 1 the 4x6
+   small font (offset 9856, bit 0x20 leftmost), 8 bytes a character. A
+   negative backcol leaves the background. */
 static void printext(unsigned char *dst, int dpitch, int w, int h, int xpos, int ypos, int col, int backcol,
     const char *name, int fontsize)
 {
@@ -2891,7 +2891,7 @@ static void printext(unsigned char *dst, int dpitch, int w, int h, int xpos, int
 
                 if (px < 0 || px >= w || py < 0 || py >= h)
                     continue;
-                if (g[r] & (0x80 >> c))
+                if (g[r] & ((fontsize ? 0x20 : 0x80) >> c))
                     dst[py * dpitch + px] = (unsigned char)col;
                 else if (backcol >= 0)
                     dst[py * dpitch + px] = (unsigned char)backcol;
