@@ -124,7 +124,7 @@ static char pskysearch[MAXSECTORS];
 short temppicnum, tempcstat, templotag, temphitag, tempextra;
 char tempshade, temppal, tempvis, tempxrepeat, tempyrepeat;
 char somethingintab = 255;
-static char boardfilename[13], oboardfilename[13];
+static char boardfilename[256], oboardfilename[256];  /* LameDuke: was 13, overrun by long names */
 
 
 static int32_t repeatcountx, repeatcounty;
@@ -2055,9 +2055,47 @@ static void showtitle(int named)
 	platform_title(buf);
 }
 
+/* The version of an existing map file, 0 when it has none, -1 when absent. */
+static int32_t mapversion(const char *filename)
+{
+	FILE *fp = plat_fopen(filename,"rb");
+	int32_t version = 0;
+
+	if (!fp)
+		return(-1);
+	if (fread(&version,4,1,fp) != 1)
+		version = 0;
+	fclose(fp);
+	return(version);
+}
+
+/* Save to boardfilename; refuse a file that is not a v5 map (the v4 L9 and
+   M8 among them) and report a write that fails. 0 when saved. */
+static int editorsaveboard(void)
+{
+	char msg[82];
+	int32_t v = mapversion(boardfilename);
+
+	if ((v > 0) && (v != 5))
+		snprintf(msg,sizeof(msg),"Not saved: %s is a version %d map",boardfilename,(int)v);
+	else if (writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum) != 0)
+		snprintf(msg,sizeof(msg),"Save failed: %s",boardfilename);
+	else
+		return(0);
+	printf("%s\n",msg);
+	if (ydim16) printmessage16(msg); else printext256(0,0,whitecol,0,msg,0);
+	return(-1);
+}
+
+/* -2 for a file that is not a v5 map: the board in memory is left alone. */
 static int editorloadboard(const char *filename)
 {
-	int r = loadboard(filename), i;
+	int32_t v = mapversion(filename);
+	int r, i;
+
+	if ((v >= 0) && (v != 5))
+		return(-2);
+	r = loadboard(filename);
 
 	showtitle(r == 0);
 	for(i=0;i<MAXSPRITES;i++)
@@ -2083,7 +2121,8 @@ void fixspritesectors(void)
 		{
 			dax = sprite[i].x;
 			day = sprite[i].y;
-			if ((sprite[i].sectnum == loadedsect[i]) && (dax == loadedx[i]) && (day == loadedy[i]))
+			/* x,y only: deleting a sector renumbers sectnum without moving anything */
+			if ((loadedsect[i] >= 0) && (dax == loadedx[i]) && (day == loadedy[i]))
 				continue;
 			if (inside(dax,day,sprite[i].sectnum) != 1)
 			{
@@ -4619,7 +4658,16 @@ void overheadeditor(void)
 					}
 					else
 					{
+						strcpy(oboardfilename,boardfilename);
 						strcpy(boardfilename,menuname[menuhighlight]);
+						if (mapversion(boardfilename) != 5)
+						{
+							/* LameDuke: keep the board and its name */
+							strcpy(boardfilename,oboardfilename);
+							printmessage16("Not a version 5 map (convert v4 maps with convmap4).");
+						}
+						else
+						{
 
 						if (highlightsectorcnt >= 0)
 						{
@@ -4753,6 +4801,7 @@ void overheadeditor(void)
 						startposz = posz;
 						startang = ang;
 						startsectnum = cursectnum;
+						}
 					}
 					plat_chdir(curpath);
 					keystatus[0x1c] = 0;
@@ -4835,11 +4884,13 @@ void overheadeditor(void)
 						printmessage16(buffer);
 
 						fixspritesectors();   /* Do this before saving! */
-						writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
-						ExtSaveMap(boardfilename);
-						showtitle(1);
-						printmessage16("Board saved.");
-                        asksave = 0;  /* rcg09032000 my add. */
+						if (editorsaveboard() == 0)
+						{
+							ExtSaveMap(boardfilename);
+							showtitle(1);
+							printmessage16("Board saved.");
+							asksave = 0;  /* rcg09032000 my add. */
+						}
 					}
 					bad = 0;
 				}
@@ -4849,10 +4900,12 @@ void overheadeditor(void)
 					keystatus[0x1f] = 0;
 					printmessage16("Saving board...");
 					fixspritesectors();   /* Do this before saving! */
-					writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
-					ExtSaveMap(boardfilename);
-					printmessage16("Board saved.");
-                    asksave = 0;  /* rcg09032000 my add. */
+					if (editorsaveboard() == 0)
+					{
+						ExtSaveMap(boardfilename);
+						printmessage16("Board saved.");
+						asksave = 0;  /* rcg09032000 my add. */
+					}
 				}
 				if (keystatus[0x10] > 0)  /* Q */
 				{
@@ -4877,10 +4930,13 @@ void overheadeditor(void)
     									keystatus[0x15] = 0;
     
     									fixspritesectors();   /* Do this before saving! */
-    									writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
-    									ExtSaveMap(boardfilename);
-                                        asksave = 0;  /* rcg09032000 my add. */
-    									break;
+    									/* a failed save stays here: Y retries, N quits */
+    									if (editorsaveboard() == 0)
+    									{
+    										ExtSaveMap(boardfilename);
+    										asksave = 0;  /* rcg09032000 my add. */
+    										break;
+    									}
     								}
     							}
                             } /* if */
@@ -6665,7 +6721,7 @@ int main(int argc,char **argv)
 	{
 		if (j++ == 0)
 		{
-			strcpy(boardfilename,argv[i]);
+			snprintf(boardfilename,sizeof(boardfilename)-4,"%s",argv[i]);
 			if (strchr(boardfilename,'.') == 0)
 				strcat(boardfilename,".map");
 		}
@@ -6698,7 +6754,14 @@ int main(int argc,char **argv)
 	for(i=0;i<MAXWALLS;i++) wall[i].extra = -1;
 	for(i=0;i<MAXSPRITES;i++) sprite[i].extra = -1;
 
-	if (editorloadboard(boardfilename) == -1)
+	i = editorloadboard(boardfilename);
+	if (i == -2)
+	{
+		/* LameDuke: never start a blank board under the name of a v4 map */
+		printf("%s is not a version 5 map; convert a v4 map with convmap4 first.\n",boardfilename);
+		editor_quit();
+	}
+	if (i == -1)
 	{
 		initspritelists();
 		posx = 32768;
@@ -6772,8 +6835,10 @@ int main(int argc,char **argv)
 
                         if (keystatus[0x15])  /* 'y' pressed. */
                         {
-                            writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
-                            ExtSaveMap(boardfilename);
+                            if (editorsaveboard() == 0)
+                                ExtSaveMap(boardfilename);
+                            else
+                                quitflag = 0, asksave = 1;  /* stay rather than lose the changes */
                         } /* if */
                     } /* if */
                     break;
@@ -6795,8 +6860,8 @@ int main(int argc,char **argv)
 		while ((ch != 'y') && (ch != 'Y') && (ch != 'n') && (ch != 'N'));
 		if ((ch == 'y') || (ch == 'Y'))
 		{
-			writeboard(boardfilename,startposx,startposy,startposz,startang,startsectnum);
-			ExtSaveMap(boardfilename);
+			if (editorsaveboard() == 0)
+				ExtSaveMap(boardfilename);
 		}
 	}
 	printf("%s\n",kensig);

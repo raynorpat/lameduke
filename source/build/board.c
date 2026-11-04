@@ -276,7 +276,8 @@ int writeboard(const char *filename, int px, int py, int pz, short startang, sho
         fwrite(&numboardextra, 2, 1, fp);
         fwrite(boardextra, 10, (size_t)numboardextra, fp);
     }
-    return fclose(fp) == 0 ? 0 : -1;
+    i = ferror(fp);
+    return fclose(fp) == 0 && !i ? 0 : -1;
 }
 
 static int sectorofwallnum(int w)

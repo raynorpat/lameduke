@@ -2919,7 +2919,9 @@ void plotpixel(int x, int y, char col)
 /* 0x4A534's frame count; nextpage shows the frame and counts it. */
 int numframes;
 
-void nextpage(void)
+/* Present the frame without counting it: the editor's 2D prompts wait in
+   loops that only poll, where DOS showed video memory as it was written. */
+void showpage(void)
 {
     static unsigned char shown[640 * 480];
 
@@ -2932,5 +2934,11 @@ void nextpage(void)
     } else {
         platform_present(frame, xdim, ydim);
     }
+}
+
+void nextpage(void)
+{
+    showpage();
     numframes++;
 }
+

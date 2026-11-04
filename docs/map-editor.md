@@ -43,7 +43,7 @@ F5 and F6 show what the cursor is on. `source/editor/lstub.c` cites the source o
 
 ## The v4 maps
 
-`L9.MAP` and `M8.MAP` are version 4, which neither the game nor the editor reads. Convert them first:
+`L9.MAP` and `M8.MAP` are version 4, which neither the game nor the editor reads. The editor refuses to open them, and it never saves over a file that isn't a version-5 map. A failed save says so and keeps your changes marked unsaved. Convert them first:
 
 ```sh
 ./build/bin/convmap4 L9.MAP L9V5.MAP

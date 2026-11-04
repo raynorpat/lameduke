@@ -70,17 +70,28 @@ static void scriptkeys(void)
 }
 
 #undef nextpage
-void editor_nextpage(void)
+static uint32_t lastshow;
+static int justshown;
+
+/* A frame reached the screen: the frame dump counts it. */
+static void countframe(void)
 {
     const char *at = getenv("LAMEDUKE_FRAME_AT"), *name = getenv("LAMEDUKE_FRAME");
 
-    nextpage();
+    lastshow = timer_ticks();
     shown++;
     if (name && shown >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
         printf("title: %s\n", platform_title_text());
         write_frame(name);
         exit(0);
     }
+}
+
+void editor_nextpage(void)
+{
+    nextpage();
+    countframe();
+    justshown = 1;
     _idle();
 }
 
@@ -92,6 +103,14 @@ void _idle(void)
     if (input_poll())
         editor_quit();
     scriptkeys();
+    /* 2D prompts wait here without nextpage; DOS showed video memory as it
+       was written, so show the frame (every step under a script) */
+    if (ydim16 && !justshown
+        && (getenv("LAMEDUKE_KEYS") || getenv("LAMEDUKE_FRAME") || timer_ticks() - lastshow >= 15)) {
+        showpage();
+        countframe();
+    }
+    justshown = 0;
     now = timer_ticks();
     tickrem += (int)(now - lasttick) * 120;
     lasttick = now;

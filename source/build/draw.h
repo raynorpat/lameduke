@@ -34,6 +34,7 @@ void printext16(int xpos, int ypos, short col, short backcol, const char *name, 
 void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize);
 void plotpixel(int x, int y, char col);
 void nextpage(void);
+void showpage(void);
 
 void draw_init(void);
 const unsigned char *framebuffer(void);
