@@ -103,6 +103,9 @@ static void present(void)
         playertype *pl = &ps[screenpeek];
 
         displayrooms(screenpeek);
+        /* the level frame only; the attract loop never shows the prompt */
+        if (demomode != 2 && (pl->gm & 0x10))
+            typemessage();
         if (pl->gm & 1) {
             pl->gm &= ~0x10;
             menus();
@@ -193,7 +196,10 @@ static void functionkeys(void)
             brightness = 0;
         setbrightness(brightness);
     }
-    /* pending: T (bit 0x10) types a message to the other players (Task 10) */
+    if (keystatus[0x14]) {
+        keystatus[0x14] = 0;
+        ps[screenpeek].gm |= 0x10;
+    }
     if (keystatus[0x20]) {
         keystatus[0x20] = 0;
         debugmode ^= 1;

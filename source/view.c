@@ -15,6 +15,8 @@
 #include "premap.h"
 #include "sdl_input.h"
 
+#include <stdlib.h>
+
 /* byte_82364. The knee's frame list, shared with the trigger in player.c. */
 extern const unsigned char kickframes[6][20];
 extern int totalclock; /* 0x23CE28, the engine clock. It does not advance yet. */
@@ -534,10 +536,29 @@ int bigtext(int x, int y, const char *s, int shade)
     return x;
 }
 
+static void typekeys(int maxlen);
+
 /* byte_11D3E0 and byte_1257C2: the line being typed. A typed character is
    not followed by a 0; only backspace writes one. */
 char typebuf[160];
 unsigned char typebuflen;
+
+static const unsigned char normal[128] = { /* byte_82738 */
+    0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
+    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0, 0, 'a', 's',
+    'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, 92, 'z', 'x', 'c', 'v',
+    'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
+    '2', '3', '0', '.',
+};
+static const unsigned char shifted[128] = { /* byte_827B8 */
+    0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
+    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0, 0, 'A', 'S',
+    'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|', 'Z', 'X', 'C', 'V',
+    'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
+    '2', '3', '0', '.',
+};
 
 /* 0x12A40: type into typebuf, at most maxlen, and draw it at (x, y): the
    big font when shade has bit 7, else the small one, then the cursor in 3D
@@ -545,24 +566,29 @@ unsigned char typebuflen;
    nonzero on Enter. */
 int strget(int x, int y, int shade, int maxlen)
 {
-    static const unsigned char normal[128] = { /* byte_82738 */
-        0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
-        'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0, 0, 'a', 's',
-        'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, 92, 'z', 'x', 'c', 'v',
-        'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
-        '2', '3', '0', '.',
-    };
-    static const unsigned char shifted[128] = { /* byte_827B8 */
-        0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
-        'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0, 0, 'A', 'S',
-        'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|', 'Z', 'X', 'C', 'V',
-        'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
-        '2', '3', '0', '.',
-    };
     playertype *pl = &ps[screenpeek];
-    int i, pal;
+    int pal;
+
+    typekeys(maxlen);
+    if (pl->f02 == 2) {
+        x = 0;
+    } else if (shade & 0x80) {
+        x = bigtext(x, y, typebuf, shade & 0x7F);
+    } else {
+        x = minitext(x, y, typebuf, shade & 0x7F);
+    }
+    if (pl->f02 == 3) {
+        pal = sector[pl->cursectnum].floorpal;
+        rotatesprite(x, y, (short)((shade & 0x80) ? 1022 : 1023), (signed char)shade, 0,
+            (unsigned char)(pal ? pal : pl->ba7));
+    }
+    return keystatus[0x9C] | keystatus[0x1C];
+}
+
+/* The key half of 0x12A40, which the message prompt at 0x16217 repeats. */
+static void typekeys(int maxlen)
+{
+    int i;
 
     for (i = 0; i < 128; i++) {
         if (!keystatus[i])
@@ -591,19 +617,24 @@ int strget(int x, int y, int shade, int maxlen)
             }
         }
     }
-    if (pl->f02 == 2) {
-        x = 0;
-    } else if (shade & 0x80) {
-        x = bigtext(x, y, typebuf, shade & 0x7F);
-    } else {
-        x = minitext(x, y, typebuf, shade & 0x7F);
-    }
-    if (pl->f02 == 3) {
-        pal = sector[pl->cursectnum].floorpal;
-        rotatesprite(x, y, (short)((shade & 0x80) ? 1022 : 1023), (signed char)shade, 0,
-            (unsigned char)(pal ? pal : pl->ba7));
-    }
-    return keystatus[0x9C] | keystatus[0x1C];
+}
+
+/* 0x16217: while T's bit 0x10 is set the level frame types a message at
+   (10, 140). Enter closes the prompt and leaves the text typed. The exe
+   also sends 4 and the text (0x58C55) to every player but the viewed one;
+   the port's ring only ever holds player 0. */
+void typemessage(void)
+{
+    int shade = hudshade(), x;
+
+    typekeys(79);
+    if (shade & 0x80)
+        x = gametext(10, 140, typebuf, shade & 0x7F);
+    else
+        x = minitext(10, 140, typebuf, shade & 0x7F);
+    overlaypal(x, 140, (shade & 0x80) ? 1022 : 1023, shade, 0);
+    if (keystatus[0x1C] | keystatus[0x9C])
+        ps[screenpeek].gm ^= 0x10;
 }
 
 /* 0x13800. */

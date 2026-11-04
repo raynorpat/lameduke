@@ -39,6 +39,7 @@ static short getword(const unsigned char *p)
 void load_user_stats(void)
 {
     FILE *fp = plat_fopen("userdefs.tmp", "rb");
+    size_t got;
 
     demomode = 0;
     if (!fp) {
@@ -58,8 +59,10 @@ void load_user_stats(void)
         cameraspr = getword(userdefs + 13);
         mousesens = getword(userdefs + 15);
     }
-    fread(scorenames, 1, sizeof scorenames, fp);
-    fread(scores, 4, 12, fp);
+    /* a short file leaves the rest as it was, as the exe's read() does */
+    got = fread(scorenames, 1, sizeof scorenames, fp);
+    got += fread(scores, 4, 12, fp);
+    (void)got;
     fclose(fp);
 }
 
@@ -203,11 +206,14 @@ void loadplayer(int slot)
     savename(name, sizeof name, slot);
     fp = plat_fopen(name, "rb");
     if (fp) {
-        fread(ps, sizeof ps, 1, fp);
-        fread(hittype, sizeof hittype, 1, fp);
+        size_t got = fread(ps, sizeof ps, 1, fp);
+
+        /* as in load_user_stats, a short slot is taken as far as it goes */
+        got += fread(hittype, sizeof hittype, 1, fp);
         readanimwalls(fp);
-        fread(msx, 4, 1024, fp);
-        fread(msy, 4, 1024, fp);
+        got += fread(msx, 4, 1024, fp);
+        got += fread(msy, 4, 1024, fp);
+        (void)got;
         fclose(fp);
         for (k = connecthead; k >= 0; k = connectpoint2[k])
             ps[k].musicptr -= EXE_MUSICFN;

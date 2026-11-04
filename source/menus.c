@@ -134,16 +134,18 @@ static void drawpointer(short pic)
         click = (short)last;
     if (buttons == 0 && last == 0)
         click = 0;
-    cursorx = (short)(cursorx + (((mousesens + 129) * dx) >> 9));
-    cursory = (short)(cursory + (((mousesens + 129) * dy) >> 9));
-    if (cursorx < 0)
-        cursorx = 0;
-    if (cursorx > 319)
-        cursorx = 319;
-    if (cursory < 0)
-        cursory = 0;
-    if (cursory > 199)
-        cursory = 199;
+    if (mouse_present()) {
+        cursorx = (short)(cursorx + (((mousesens + 129) * dx) >> 9));
+        cursory = (short)(cursory + (((mousesens + 129) * dy) >> 9));
+        if (cursorx < 0)
+            cursorx = 0;
+        if (cursorx > 319)
+            cursorx = 319;
+        if (cursory < 0)
+            cursory = 0;
+        if (cursory > 199)
+            cursory = 199;
+    }
     if (ps[screenpeek].f02 != 3)
         return;
     pal = sector[ps[screenpeek].cursectnum].floorpal;

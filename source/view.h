@@ -23,6 +23,7 @@ extern char typebuf[160];
 extern unsigned char typebuflen;
 int strget(int x, int y, int shade, int maxlen);
 int bigtext(int x, int y, const char *s, int shade);
+void typemessage(void);
 
 /* 0x13800. That font, for a base-10 number. */
 void numtext(int x, int y, int value, int shade);
