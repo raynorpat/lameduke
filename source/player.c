@@ -743,7 +743,8 @@ void playerkeys(short p)
     if (bits & 0x400000) {
         if (pl->f02 == 3) {
             pl->f02 = 2;
-            /* pending: 0x53F42 switches the local player to the 640x350 map mode */
+            if (p == myconnectindex)
+                setmapmode();
         } else {
             pl->f02 = 3;
             setgamemode();

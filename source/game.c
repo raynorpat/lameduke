@@ -228,9 +228,14 @@ static void functionkeys(void)
         myconnectindex = connectpoint2[myconnectindex];
         if (myconnectindex == -1)
             myconnectindex = connecthead;
-        /* pending: in the 2D map 0x53F42 redraws it; the 3D view clears the border with tile 1170 */
-        if (ps[myconnectindex].f02 == 3)
+        if (ps[myconnectindex].f02 == 3) {
+            rotatesprite(0, 0, 1170, 0, 0, 0);
+            platform_present(framebuffer(), xdim, ydim);
+            rotatesprite(0, 0, 1170, 0, 0, 0);
+            platform_present(framebuffer(), xdim, ydim);
             setgamemode();
+        } else
+            setmapmode();
         viewsize(myconnectindex);
     }
     if (keystatus[0x11] && debugmode && !(ps[screenpeek].gm & 0x10)) {
@@ -276,6 +281,8 @@ static int play_demo(const demo_t *demo)
         syncavel[0] = (signed char)signed_byte(demo->turn[i]);
         syncbits[0] = demo->bits[i];
         synctics = (unsigned char)tics;
+        /* the interrupt's count; the recording kept pace with it */
+        totalclock += tics;
         domovethings();
         if (trace && trace[0])
             printf("sample %d %d %d %d %d %d\n", i, ps[0].posx, ps[0].posy, ps[0].posz, ps[0].ang,
@@ -354,6 +361,7 @@ static int play_level(void)
         syncavel[0] = (signed char)av;
         syncbits[0] = bits;
         synctics = (unsigned char)steps;
+        totalclock += steps;
         domovethings();
         /* 0x17411: an exit sets bit 3, and the next level starts. */
         if (ps[screenpeek].gm & 8) {
@@ -375,6 +383,88 @@ static void show(void)
 {
     pansounds();
     platform_present(framebuffer(), xdim, ydim);
+}
+
+/* One line of the 0x19650 tally: label, percent, "%, =", points. */
+static void tallyline(int y, const char *label, int pct, int worth, int shade)
+{
+    char buf[16];
+
+    minitext(60, y - 10, label, shade);
+    snprintf(buf, sizeof buf, "%d", (short)pct);
+    minitext(60, y, buf, shade);
+    minitext(72, y, "%, =", shade);
+    snprintf(buf, sizeof buf, "%d", worth * (short)pct);
+    minitext(100, y, buf, shade);
+    minitext(140, y, "points.", shade);
+    ps[screenpeek].f36 += worth * (short)pct;
+}
+
+/* 0x249B0's screen. With /d or without mode bit 4, tile 482 says which level
+   loads. Otherwise 0x19650 shows the episode map with the levels done, plus
+   the tally after an exit, until Enter, Space, Esc or 2048 clock ticks. The
+   exe adds the tally to the score on every frame it shows it, as here. */
+void levelscreen(int mode)
+{
+    static const short marks[8][2] = { { 9, 60 }, { 61, 82 }, { 84, 57 }, { 85, 112 },
+                                       { 300, 64 }, { 261, 83 }, { 223, 97 }, { 0, 0 } };
+    playertype *pl = &ps[0];
+    short start = (short)totalclock;
+    int pct = 0, rem = 0, i;
+    uint32_t prev = timer_ticks();
+
+    if (debugmode || !(mode & 4)) {
+        rotatesprite(0, 0, 482, 0, 0, 0);
+        minitext(170, 50, "Entering...", 0);
+        minitext(174, 62, "Episode", 0);
+        minitext(174, 74, "Level", 0);
+        numtext(232, 62, pl->volume + 1, 0);
+        numtext(232, 74, pl->level + 1, 0);
+        show();
+        return;
+    }
+    while (!keystatus[0x9C] && !keystatus[0x1C] && !keystatus[0x39] && !keystatus[0x01]
+           && start + 2048 > totalclock) {
+        int shade = hudshade();
+        uint32_t now;
+
+        if (input_poll())
+            return;
+        now = timer_ticks();
+        rem += (int)(now - prev) * 120 * (setup_byte(2) != 0 ? 6 : 1);
+        prev = now;
+        totalclock += rem / 1000;
+        rem %= 1000;
+        rotatesprite(0, 0, pl->volume < 2 ? 1132 : 1135, 0, 0, 0);
+        bigtext(36, 160, "Press SPACE to continue", shade);
+        /* word_82304 has only episode 1's points; the rest are zeros and other data */
+        for (i = 0; i < pl->level && i < 8; i++)
+            rotatesprite(pl->volume ? 0 : marks[i][0], pl->volume ? 0 : marks[i][1], 1133, (signed char)shade, 0, 0);
+        if (i < 8)
+            rotatesprite(pl->volume ? 0 : marks[i][0], pl->volume ? 0 : marks[i][1], 1134, (signed char)shade, 0, 0);
+        if (ps[myconnectindex].gm == 8) {
+            bigtext(32, 10, "BONUS", 0);
+            /* a zero count keeps the last percentage */
+            if (start + 240 < totalclock) {
+                if (pl->ba9)
+                    pct = 100 * pl->baa / pl->ba9;
+                tallyline(60, "Secret rooms Found", pct, 10000, shade);
+            }
+            if (start + 480 < totalclock) {
+                if (pl->bac)
+                    pct = 100 * pl->bad / pl->bac;
+                tallyline(90, "Bad guys squashed", pct, 1000, shade);
+            }
+            if (start + 720 < totalclock) {
+                if (pl->bae)
+                    pct = 100 * pl->baf / pl->bae;
+                tallyline(120, "Bad guys killed", pct, 1000, shade);
+            }
+        }
+        show();
+        /* nextpage waited for the 70 Hz retrace */
+        SDL_Delay(14);
+    }
 }
 
 /* 0x1749E. Unless /d is on or the player left for the main menu, a score
@@ -445,6 +535,7 @@ int main(int argc, char **argv)
     puts("Loading art...");
     loadpics("tiles000.art");
     puts("Init colorize/remaps...");
+    initplasma();
     loadlookup();
     loadpalette();
 

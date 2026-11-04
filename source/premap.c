@@ -1,10 +1,12 @@
 #include "premap.h"
+#include "game.h"
 
 #include "global.h"
 #include "actors.h"
 #include "gamedef.h"
 #include "sector.h"
 #include "sounds.h"
+#include "fx_man.h"
 
 #include "board.h"
 #include "display.h"
@@ -169,7 +171,7 @@ static void prelevel(void)
     resetplayer(0);
     for (k = 0; k < 13; k++)
         (&pl->w60)[k] = 0;
-    /* pending: byte_1B8010, the 2D map seen-sector bits, all set here */
+    memset(show2dwall, 0xFF, 512);
     memset(show2dsprite, debugmode ? 0xFF : 0, 512);
     for (k = 0; k < numsectors; k++) {
         sector[k].extra = 256;
@@ -279,14 +281,13 @@ int enterlevel(int mode)
     short p, j;
     int pal = 0;
 
-    /* pending: the 482 loading screen with "Entering..." (or the 0x19650 title
-       loop when mode has 4 and /d is off) is drawn with the display */
+    levelscreen(mode);
     name[0] = (char)('L' + ps[0].volume);
     name[1] = (char)('1' + ps[0].level);
     puts("Entering...");
     printf("Episode %d\n", ps[0].volume + 1);
     printf("Level %d\n", ps[0].level + 1);
-    /* pending: 0x6E978 stops the song (music task) */
+    FX_StopAllSounds();
     if (loadboard(name) != 0)
         errorexit("Board not found.");
     ps[0].posx = posx;
@@ -332,7 +333,7 @@ int enterlevel(int mode)
     ps[screenpeek].musicptr = 130 * (ps[screenpeek].volume + 1) + 13 * ps[screenpeek].level;
     playmusic(&musicfn[0][0][0] + ps[screenpeek].musicptr);
     /* pending: 0x17890 draws the status bar */
-    lockclock = 0;
+    totalclock = lockclock = 0;
     synctics = 0;
     ps[screenpeek].gm = (unsigned char)mode;
     return 0;

@@ -19,7 +19,6 @@
 
 /* byte_82364. The knee's frame list, shared with the trigger in player.c. */
 extern const unsigned char kickframes[6][20];
-extern int totalclock; /* 0x23CE28, the engine clock. It does not advance yet. */
 
 /* word_12538E / dword_125248, and the sine walk at word_125390. */
 short msgtime;
@@ -28,17 +27,124 @@ static short hudpulse;
 
 #define GOTPIC(p) (gotpic[(p) >> 3] & (1 << ((p) & 7)))
 
+/* The tile 49 plasma: drops of up to 10 rings spread over a 128x128 tile,
+   which is then blurred. dword_12DAE0 and the offset tables hold each
+   ring's points, dword_125AA0 the strength by ring, byte_125A20 a ripple. */
+static int ringcount[32];
+static signed char ringx[32][128], ringy[32][128];
+static int ringamp[16];
+static unsigned char ripple[128];
+static int drops, dropx[16], dropy[16], dropring[16]; /* dword_131DE8 and the drop arrays */
+static int plasmaframe;                              /* dword_131DE4 */
+
+/* 0x3E120, once at startup. */
+void initplasma(void)
+{
+    int x, y, i;
+
+    for (x = -16; x <= 16; x++) {
+        for (y = -16; y <= 16; y++) {
+            int r = ksqrt(x * x + y * y);
+
+            ringx[r][ringcount[r]] = (signed char)x;
+            ringy[r][ringcount[r]] = (signed char)y;
+            ringcount[r]++;
+        }
+    }
+    for (i = 0; i < 16; i++)
+        ringamp[i] = 8 / (ksqrt(i) + 1);
+    for (i = 0; i < 128; i++)
+        ripple[i] = (unsigned char)(abs(((i ^ 0x11) >> 4 & 7) - 4) + 12);
+    drops = 0;
+    plasmaframe = 0;
+}
+
+/* 0x3E200: new drops, every drop's ring raised or lowered by turns (never
+   below 64), then each texel the average of seven neighbours on the
+   wrapped tile, low five bits, plus a ripple. */
+static void plasma(unsigned char *tile)
+{
+    static unsigned char wrap[130 * 130];
+    int n = drops + 3 >= 16 ? 16 - drops - 1 : 3, d, last, r, c, p;
+
+    for (; n >= 0; n--) {
+        dropx[drops] = wrand() & 0x7F;
+        dropy[drops] = wrand() & 0x7F;
+        dropring[drops] = 1;
+        drops++;
+    }
+    last = drops;
+    for (d = drops - 1; d >= 0; d--) {
+        int amp = (2 * (d & 1) - 1) * ringamp[dropring[d]], ring = dropring[d];
+
+        for (p = ringcount[ring] - 1; p >= 0; p--) {
+            unsigned char *t = &tile[128 * ((dropx[d] + ringx[ring][p]) & 0x7F) + ((dropy[d] + ringy[ring][p]) & 0x7F)];
+            unsigned char v = (unsigned char)(*t + amp);
+
+            *t = v < 0x40 ? 64 : v;
+        }
+        if (++dropring[d] > 10) {
+            drops--;
+            dropx[d] = dropx[last - 1];
+            dropy[d] = dropy[last - 1];
+            last--;
+            dropring[d] = dropring[last];
+        }
+    }
+    for (r = 0; r < 128; r++) {
+        memcpy(&wrap[130 * (r + 1) + 1], &tile[128 * r], 128);
+        wrap[130 * (r + 1)] = tile[128 * r + 127];
+        wrap[130 * (r + 1) + 129] = tile[128 * r];
+    }
+    memcpy(&wrap[1], &tile[128 * 127], 128);
+    memcpy(&wrap[130 * 129 + 1], &tile[0], 128);
+    wrap[0] = tile[0x3FFF];
+    wrap[129] = tile[128 * 127];
+    wrap[130 * 129] = tile[127];
+    wrap[130 * 130 - 1] = tile[0];
+    for (p = 0; p < 130 * 130; p++)
+        wrap[p] &= 0x1F;
+    for (r = 127; r >= 0; r--) {
+        int mask = (plasmaframe + r) & 0x7F, m = 130 * (r + 1) + 1;
+
+        for (c = 0; c < 128; c++, m++)
+            tile[128 * r + c] = (unsigned char)(((wrap[m + 129] + wrap[m + 130] + wrap[m + 1] + wrap[m - 1] + wrap[m - 129]
+                                                     + wrap[m - 130] + wrap[m - 131] + ripple[(127 - c) & mask])
+                                                    & 0xFF) >> 3) + 64;
+    }
+    plasmaframe++;
+}
+
+static void rendertile(int x, int y, int z, short a, short sect, short pic);
+
+/* 0x21A10: tile 570 shows the view from wall w's middle toward the
+   viewed player, at the player's height, from the sector behind it. */
+static void mirrorview(short w)
+{
+    playertype *pl = &ps[myconnectindex];
+    int mx = (wall[w].x + wall[wall[w].point2].x) / 2, my = (wall[w].y + wall[wall[w].point2].y) / 2;
+
+    rendertile(mx, my, pl->posz, (short)getangle(pl->posx - mx, pl->posy - my), wall[w].nextsector, 570);
+}
+
 /* 0x25550. Steps the animated walls drawn this frame. */
 static void animatewalls(void)
 {
-    int k;
+    int k, mirror = (gotpic[570 >> 3] >> (570 & 7)) & 1;
 
-    /* pending: tile 49 plasma (0x3E200) and the tile 570 view (0x21A10) when drawn */
+    if (((gotpic[49 >> 3] >> (49 & 7)) & 1) && waloff[49])
+        plasma(waloff[49]);
     for (k = 0; k < numanimwalls; k++) {
         short w = animwall[k].wallnum, pic = wall[w].picnum;
 
-        if (pic == 570)
+        if (pic == 570) {
+            /* the first one drawn renders; the rest show the same tile */
+            if (mirror) {
+                mirrorview(w);
+                mirror = 0;
+            }
             continue;
+        }
         if (pic >= 761 && pic <= 763) {
             wall[w].picnum = (short)animwall[k].tag;
             continue;
@@ -181,7 +287,7 @@ static void animatesprites(int viewang)
 
 /* 0x126C0. A HUD tile, drawn only in the 3D view, paletted by the floor
    under the local player or by that player's own palette. */
-static void overlaypal(int x, int y, int pic, int shade, int flags)
+void overlaypal(int x, int y, int pic, int shade, int flags)
 {
     playertype *me = &ps[myconnectindex];
     int pal;
@@ -880,9 +986,13 @@ void drawview(short p)
 {
     playertype *pl = &ps[p];
 
-    if (pl->f02 == 2)
-        return; /* pending: 0x5445E draws the 2D map */
-    /* pending: resizing (sync bits 0x80000/0x100000/0x400000) refills the border with tile 1170 */
+    if (pl->f02 == 2) {
+        draw2dscreen(pl->posx, pl->posy, (short)(pl->ang + pl->lookang), pl->f06, show2dsprite);
+        return;
+    }
+    /* 0x160BD: a resize or map key repaints the border with tile 1170 */
+    if (syncbits[p] & (0x80000 | 0x100000 | 0x400000))
+        rotatesprite(0, 0, 1170, 0, 0, 0);
     animatewalls();
     updateviewscreen(p);
     if (cameraspr >= 0) {

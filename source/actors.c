@@ -9,6 +9,7 @@
 #include "game.h"
 #include "draw.h"
 #include "music.h"
+#include "view.h"
 
 #include "board.h"
 #include "math.h"
@@ -1512,7 +1513,7 @@ static void movereactor(short i, short sect, int dist)
         stopsound(26);
     } else {
         t[0] += 128;
-        /* pending: the 0x126C0 overlay rotatesprite(246, 18, 611, (sin[t0] >> 11) + 8, 1), lifted with the display */
+        overlaypal(246, 18, 611, (sintable()[t[0] & 2047] >> 11) + 8, 1);
         if (t[3] == 0) {
             spritesound(26, i);
             t[3] = 1;

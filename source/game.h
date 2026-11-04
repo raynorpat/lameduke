@@ -15,6 +15,8 @@ int compilecon(void);
 void menus_init(void);
 void loadsounds(void);
 void sound_callback(unsigned long value);
+/* 0x249B0's Entering screen, or the 0x19650 map and tally */
+void levelscreen(int mode);
 
 extern int sound_volume;
 extern int music_volume;

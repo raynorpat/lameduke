@@ -18,12 +18,16 @@ int minitext(int x, int y, const char *s, int shade);
 int gametext(int x, int y, const char *s, int shade);
 /* 0x123D0: the pulsing shade; every call steps the pulse. */
 int hudshade(void);
+/* 0x126C0 */
+void overlaypal(int x, int y, int pic, int shade, int flags);
 /* 0x12A40 */
 extern char typebuf[160];
 extern unsigned char typebuflen;
 int strget(int x, int y, int shade, int maxlen);
 int bigtext(int x, int y, const char *s, int shade);
 void typemessage(void);
+/* 0x3E120 */
+void initplasma(void);
 
 /* 0x13800. That font, for a base-10 number. */
 void numtext(int x, int y, int value, int shade);

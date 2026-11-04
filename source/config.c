@@ -224,6 +224,17 @@ void loadplayer(int slot)
     }
     if (loadboard(board) != 0)
         errorexit("Board not found.");
+    /* The renumbered sprites can pair an actor with another sprite's t1 and
+       t4. The exe would follow them as pointers; here one that is not a
+       script index becomes 0 rather than a read outside script. */
+    for (k = 0; k < MAXSPRITES; k++) {
+        if (!conactor(sprite[k].picnum))
+            continue;
+        if (hittype[k][1] < 0 || hittype[k][1] >= scriptsize)
+            hittype[k][1] = 0;
+        if (hittype[k][4] < 0 || hittype[k][4] >= scriptsize)
+            hittype[k][4] = 0;
+    }
     ps[0].posx = posx;
     ps[0].posy = posy;
     ps[0].posz = posz;
