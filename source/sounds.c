@@ -3,8 +3,10 @@
 
 #include "board.h"
 #include "cache1d.h"
+#include "engine.h"
 #include "fx_man.h"
 #include "math.h"
+#include "music.h"
 #include "platform.h"
 
 #include <stdio.h>
@@ -142,8 +144,31 @@ void pansounds(void)
     }
 }
 
-/* 0x3BC40 */
+/* 0x3BC40: read the whole song (into unk_B5810 in the exe) and loop it.
+   A song that does not open leaves the music as it was. */
 void playmusic(const char *fn)
 {
-    (void)fn;
+    static unsigned char *song;
+    unsigned char *next;
+    FILE *fp;
+    long len;
+
+    if (setup_byte(2) == 0)
+        return;
+    fp = plat_fopen(fn, "rb");
+    if (!fp)
+        return;
+    fseek(fp, 0, SEEK_END);
+    len = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    next = (unsigned char *)malloc((size_t)len);
+    if (!next || fread(next, 1, (size_t)len, fp) != (size_t)len) {
+        free(next);
+        fclose(fp);
+        return;
+    }
+    fclose(fp);
+    MUSIC_PlaySong(next, 1);
+    free(song);
+    song = next;
 }
