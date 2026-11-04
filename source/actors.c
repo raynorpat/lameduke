@@ -317,7 +317,7 @@ short spawn(short j, short pn)
         changespritestat(i, 7);
         sp->xrepeat = sp->yrepeat = 0;
         break;
-    case 30: case 313: case 314:
+    case 30: case 313: case 314: case 1123:
         sp->cstat |= 1;
         /* fall through */
     case 1122:
