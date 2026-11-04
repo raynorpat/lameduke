@@ -610,14 +610,14 @@ static short furthestangle(short i, short angs)
 {
     spritetype *s = &sprite[i];
     int a = 0, best = 0, greatest = INT_MIN;
-    short hitsect, hitwall, hitspr;
+    short hitsect, hitwall;
     int hx, hy, hz;
 
     do {
         int d;
 
         hitscan(s->x, s->y, s->z - 0x800, s->sectnum, sintable()[(a + 512) & 2047], sintable()[a & 2047], 0,
-            &hitsect, &hitwall, &hitspr, &hx, &hy, &hz);
+            &hitsect, &hitwall, &hitsect, &hx, &hy, &hz); /* the exe aliases hitsprite to hitsect */
         d = abs(hx - s->x) + abs(hy - s->y);
         if (d > greatest) {
             greatest = d;
