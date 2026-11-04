@@ -8,5 +8,6 @@
 
 void timer_init(void);
 uint32_t timer_ticks(void);
+void timer_delay(uint32_t ms);
 
 #endif

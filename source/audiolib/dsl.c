@@ -3,7 +3,8 @@
 #include "oplemu.h"
 #include "task_man.h"
 
-#include <SDL.h>
+#include "sdl_audio.h"
+
 #include <math.h>
 
 /* One SDL device stands in for the SB16: its DAC plays multivoc's buffers
@@ -12,7 +13,6 @@
 
 #define DEVICE_RATE 44100
 
-static SDL_AudioDeviceID dsl_device;
 static unsigned fxrate;
 static int fxon, musicon;
 static int voicegain = 256, fmgain = 256; /* 8.8, from the card's mixer levels */
@@ -28,12 +28,8 @@ static int clamp16(int v)
     return v < -32768 ? -32768 : v > 32767 ? 32767 : v;
 }
 
-static void dsl_callback(void *userdata, Uint8 *stream, int len)
+static void dsl_fill(short *out, int n)
 {
-    short *out = (short *)stream;
-    int n = len / 4;
-
-    (void)userdata;
     while (n-- > 0) {
         int l = 0, r = 0;
 
@@ -77,23 +73,7 @@ static void dsl_callback(void *userdata, Uint8 *stream, int len)
 
 static int opendevice(void)
 {
-    SDL_AudioSpec want;
-
-    if (dsl_device != 0)
-        return 0;
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
-        return -1;
-    SDL_zero(want);
-    want.freq = DEVICE_RATE;
-    want.format = AUDIO_S16SYS;
-    want.channels = 2;
-    want.samples = 512;
-    want.callback = dsl_callback;
-    dsl_device = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
-    if (dsl_device == 0)
-        return -1;
-    SDL_PauseAudioDevice(dsl_device, 0);
-    return 0;
+    return platform_audio_open(DEVICE_RATE, dsl_fill);
 }
 
 int DSL_Init(unsigned rate, int channels, int bits)
@@ -121,23 +101,18 @@ int DSL_InitMusic(void)
 
 void DSL_Shutdown(void)
 {
-    if (dsl_device != 0) {
-        SDL_CloseAudioDevice(dsl_device);
-        dsl_device = 0;
-    }
+    platform_audio_close();
     fxon = musicon = 0;
 }
 
 void DSL_Lock(void)
 {
-    if (dsl_device != 0)
-        SDL_LockAudioDevice(dsl_device);
+    platform_audio_lock();
 }
 
 void DSL_Unlock(void)
 {
-    if (dsl_device != 0)
-        SDL_UnlockAudioDevice(dsl_device);
+    platform_audio_unlock();
 }
 
 static int levelgain(int level)

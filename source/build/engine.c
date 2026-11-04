@@ -4,6 +4,7 @@
 #include "math.h"
 
 #include "platform.h"
+#include "sdl_main.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +41,7 @@ void errorexit(const char *msg)
         puts(msg);
     /* 0x10C60 also tears down the timer and video, and prints a CP437 bar
        above the message, before exit(0). */
+    platform_quit();
     exit(0);
 }
 

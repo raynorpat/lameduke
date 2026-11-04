@@ -15,6 +15,7 @@ add_library(buildengine STATIC
   sdl_input.c
   sdl_window.c
   sdl_sys.c
+  sdl_audio.c
   sdl_opengl.c)
 
 if(WIN32)

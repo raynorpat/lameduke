@@ -186,12 +186,8 @@ int loadboard(const char *filename)
         return -1;
     }
     numboardextra = nextra;
-    i = fgetc(fp);
+    /* the exe stops reading here, so anything after the tail is ignored */
     fclose(fp);
-    if (i != EOF) {
-        free_board();
-        return -1;
-    }
 
     for (i = 0; i < nspr; i++)
         insertsprite(sprite[i].sectnum, sprite[i].statnum);

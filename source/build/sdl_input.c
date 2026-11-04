@@ -101,7 +101,7 @@ int input_poll(void)
 
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 mouse_buttons |= b;
-                if (b == 1)
+                if (b == 1 && mouse_present())
                     SDL_SetRelativeMouseMode(SDL_TRUE);
             } else {
                 mouse_buttons &= ~b;

@@ -11,3 +11,8 @@ uint32_t timer_ticks(void)
 {
     return SDL_GetTicks();
 }
+
+void timer_delay(uint32_t ms)
+{
+    SDL_Delay(ms);
+}
