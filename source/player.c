@@ -164,27 +164,29 @@ void shoot(short i, short atwith, int mode)
         if (sector[hitsect].ceilingz + 1024 > hz)
             hz = sector[hitsect].ceilingz + 2048;
         if (sprite[i].picnum == APLAYER) {
-            short k = EGS(hitsect, hx, hy, hz, 0, 1210, -16, 10, 10, sa, 64, zvel, i, 4);
+            short k = EGS(hitsect, hx, hy, hz - 2816, 0, 1210, -16, 10, 10, sa, 64, zvel, i, 4);
 
             sprite[k].yvel = hitwall;
         } else {
-            EGS(hitsect, hx, hy, hz, 0, 191, -16, 16, 16, sa, 64, zvel, i, 4);
+            EGS(hitsect, hx, hy, hz - 2304, 0, 191, -16, 16, 16, sa, 64, zvel, i, 4);
         }
         break;
     }
     case 389:
         spritesound(1, i);
         spritesound(24, i);
-        EGS(sect, sx, sy, sz, 1, 389, -127, 12, 12, sa, 0, zvel, i, 4);
+        EGS(sect, sx + (sintable()[(sa + 512) & 2047] >> 6), sy + (sintable()[sa & 2047] >> 6), sz - 2048,
+            1, 389, -127, 12, 12, sa, 0, zvel, i, 4);
         break;
     case 563:
         spritesound(38, i);
-        EGS(sect, sx, sy, sz, 0x41, 563, -16, 16, 16, sa, 0, zvel, i, 4);
+        EGS(sect, sx + (sintable()[(sa + 640) & 2047] >> 5), sy + (sintable()[(sa + 128) & 2047] >> 5),
+            sz - 2304, 0x41, 563, -16, 16, 16, sa, 0, zvel, i, 4);
         break;
     case 1230:
         sx += sintable()[(sa + 544) & 2047] >> 7;
         sy += sintable()[(sa + 32) & 2047] >> 7;
-        EGS(sect, sx, sy, sz - 2048, 0, 46, -16, 0, 0, sa, 32, 0, i, 4);
+        EGS(sect, sx, sy, sz, 0, 46, -16, 0, 0, sa, 32, 0, i, 4);
         /* The exe sets the shooter's own extra from the 1230 actor's strength. */
         if (actorscrptr[1230])
             sprite[i].extra = (short)script[actorscrptr[1230]];
