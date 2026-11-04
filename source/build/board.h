@@ -74,6 +74,8 @@ extern short cursectnum;
 extern unsigned char show2dwall[(MAXWALLS + 7) >> 3];
 extern unsigned char show2dsprite[(MAXSPRITES + 7) >> 3];
 int loadboard(const char *filename);
+/* Every sprite free, every list empty (loadboard starts with it). */
+void initspritelists(void);
 int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect);
 /* The editor's save: sprites in index order, and the closing count only if
    the loaded board had one (boardhadextra), so an unedited map comes back

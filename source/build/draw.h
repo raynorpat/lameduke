@@ -26,7 +26,7 @@ extern short editstatus, searchit;
 extern int searchx, searchy;
 extern short searchsector, searchwall, searchstat;
 extern short linehighlight, pointhighlight, highlightcnt;
-extern int ydim16, numframes;
+extern int ydim16, numframes, pageoffset;
 void clear2dscreen(void);
 void draw2dgrid(int x, int y, short ang, int zoom, short gride);
 void drawline16(int x1, int y1, int x2, int y2, int col);

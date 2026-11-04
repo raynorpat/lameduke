@@ -36,6 +36,7 @@ void setgamemode(void)
         ydim = 200;
     }
     ydim16 = 0;
+    pageoffset = 0;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
     setbrightness(curbrightness);
@@ -54,6 +55,7 @@ void setmapmode(void)
     xdim = 640;
     ydim = 350;
     ydim16 = 350;
+    pageoffset = 0;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
     memcpy(palette, ega, sizeof ega);
@@ -66,10 +68,14 @@ void qsetmode640480(void)
     xdim = 640;
     ydim = 480;
     ydim16 = 336;
+    pageoffset = 92160;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());
     memset(palette, 0, sizeof palette);
     memcpy(palette, ega, sizeof ega);
+    /* the status bar memory in colour 8, the map area clear */
+    memset((unsigned char *)framebuffer(), 8, 92160);
+    memset((unsigned char *)framebuffer() + 92160, 0, 640 * 336);
 }
 
 /* 0x57A5A: the DAC gets each colour through row level of the brightness

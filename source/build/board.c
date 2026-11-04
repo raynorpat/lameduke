@@ -36,7 +36,7 @@ static void free_board(void)
 }
 
 /* 0x50A72 */
-static void initspritelists(void)
+void initspritelists(void)
 {
     int i;
 

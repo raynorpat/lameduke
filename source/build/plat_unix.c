@@ -4,6 +4,8 @@
 #include <limits.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 FILE *plat_fopen(const char *name, const char *mode)
 {
@@ -34,4 +36,26 @@ FILE *plat_fopen(const char *name, const char *mode)
     }
     closedir(dir);
     return fopen(name, mode);
+}
+
+int plat_listdir(void (*fn)(const char *name, int isdir, void *ctx), void *ctx)
+{
+    DIR *dir = opendir(".");
+    struct dirent *de;
+
+    if (!dir)
+        return -1;
+    while ((de = readdir(dir)) != NULL) {
+        struct stat st;
+
+        if (stat(de->d_name, &st) == 0)
+            fn(de->d_name, S_ISDIR(st.st_mode) != 0, ctx);
+    }
+    closedir(dir);
+    return 0;
+}
+
+int plat_chdir(const char *dir)
+{
+    return chdir(dir);
 }

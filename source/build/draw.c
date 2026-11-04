@@ -27,6 +27,10 @@ short searchsector, searchwall, searchstat;           /* word_23DE4A, word_23DE4
 short linehighlight = -1, pointhighlight = -1;        /* word_23DE64, word_23DE66 */
 short highlightcnt;                                   /* word_23DE60 */
 int ydim16;                                           /* dword_23C354, 0 outside the 2D modes */
+/* dword_23C358: where 2D drawing starts in the frame. The 640x480 mode is a
+   VGA split screen: the top 336 rows show the frame from 92160 on, the
+   bottom 144 (the status bar) the frame from 0. */
+int pageoffset;
 
 /* View state (0x23C3A4..0x23C3F8, 0x23DE6E). */
 static int globalposx, globalposy, globalposz, globalhoriz, globalhorizraw;
@@ -2603,7 +2607,7 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
    top ydim16 rows as the exe clips it. */
 void drawline16(int x1, int y1, int x2, int y2, int col)
 {
-    unsigned char *f = frame;
+    unsigned char *f = frame + pageoffset;
     const int h = ydim16;
     int dx, dy, i, e, p;
 
@@ -2732,7 +2736,7 @@ static int isshown(const unsigned char *bits, int i)
 /* 0x54130: the 2D area above the status bar, ydim16 rows. */
 void clear2dscreen(void)
 {
-    memset(frame, 0, (size_t)(640 * ydim16));
+    memset(frame + pageoffset, 0, (size_t)(640 * ydim16));
 }
 
 /* 0x5417F: grid lines in colour 8 every 2048 >> gride units over the
@@ -2758,7 +2762,7 @@ void draw2dgrid(int x, int y, short ang, int zoom, short gride)
                 break;
             if (sx >= 0)
                 for (r = top; r <= bot; r++)
-                    frame[640 * r + sx] = 8;
+                    frame[pageoffset + 640 * r + sx] = 8;
         }
     for (i = -65536; i <= 65536; i += 2048 >> gride) {
         int sy = (zoom * (y - i)) >> 14;
@@ -2836,7 +2840,7 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
             if (pointhighlight == i || (highlightcnt > 0 && isshown(show2dwall, i)))
                 mc = blink + 2;
             for (j = 0; j < 16; j++)
-                frame[x1 + 640 * y1 + wallmark[j]] = (unsigned char)mc;
+                frame[pageoffset + x1 + 640 * y1 + wallmark[j]] = (unsigned char)mc;
         }
     }
     if (zoom >= 256 || editstatus == 0) {
@@ -2855,7 +2859,7 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
                 if (sx < 2 || sx > 637 || sy < 2 || sy > ydim16 - 3)
                     continue;
                 for (r = 0; r < 16; r++)
-                    frame[sx + 640 * sy + spritering[r]] = (unsigned char)col;
+                    frame[pageoffset + sx + 640 * sy + spritering[r]] = (unsigned char)col;
                 drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) / 768 + sx,
                     (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) / 768 + sy, col);
             }
@@ -2897,7 +2901,7 @@ static void printext(unsigned char *dst, int dpitch, int w, int h, int xpos, int
 
 void printext16(int xpos, int ypos, short col, short backcol, const char *name, char fontsize)
 {
-    printext(frame, 640, 640, ydim, xpos, ypos, col, backcol, name, fontsize);
+    printext(frame + pageoffset, 640, 640, ydim16, xpos, ypos, col, backcol, name, fontsize);
 }
 
 void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize)
@@ -2917,6 +2921,16 @@ int numframes;
 
 void nextpage(void)
 {
-    platform_present(frame, xdim, ydim);
+    static unsigned char shown[640 * 480];
+
+    if (ydim == 480 && ydim16 && pageoffset + ydim16 * 640 <= (int)sizeof frame) {
+        int top = 480 - 144;
+
+        memcpy(shown, frame + 92160, (size_t)(640 * top));
+        memcpy(shown + 640 * top, frame, 640 * 144);
+        platform_present(shown, xdim, ydim);
+    } else {
+        platform_present(frame, xdim, ydim);
+    }
     numframes++;
 }
