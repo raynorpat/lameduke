@@ -55,3 +55,22 @@ void BLASTER_SetCallBack(void (*function)(unsigned long))
 {
     blaster_callback = function;
 }
+
+static int fmlevel = 0xC0; /* SB16 mixer registers 0x34/0x35 after reset */
+
+/* 0x6FD04, the SB16 branch: both FM volume registers get volume & 0xF8. */
+void BLASTER_SetFMVolume(int volume)
+{
+    if (volume > 255)
+        volume = 255;
+    if (volume < 0)
+        volume = 0;
+    fmlevel = volume & 0xF8;
+    DSL_SetFMLevel(fmlevel >> 3);
+}
+
+/* 0x6FC60 */
+int BLASTER_GetFMVolume(void)
+{
+    return fmlevel;
+}

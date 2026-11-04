@@ -1,5 +1,5 @@
-/* The DMA side of multivoc: dsl.c's audio callback asks for frames, and
-   each 256 come from one pass of the interrupt routine. */
+/* The DMA side of multivoc: dsl.c's audio callback asks for mix-rate
+   frames, and each 256 come from one pass of the interrupt routine. */
 
 #include "mv_mix.h"
 #include "multivoc.h"

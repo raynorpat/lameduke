@@ -3,15 +3,24 @@
 #include "al_midi.h"
 #include "awe32.h"
 #include "blaster.h"
+#include "dsl.h"
 #include "gusmidi.h"
 #include "ll_man.h"
+#include "midi.h"
 #include "mpu401.h"
 #include "pas16.h"
 #include "sndcards.h"
 
+#include <stddef.h>
+
 int MUSIC_ErrorCode = MUSIC_Ok;
 static int MUSIC_Card = -1;
-static int music_volume;
+
+/* unk_241B98, filled by 0x68F94 for the OPL cards. */
+static midifuncs al_funcs = {
+    AL_NoteOff, AL_NoteOn, NULL, AL_ControlChange, AL_ProgramChange, NULL, AL_SetPitchBend,
+    NULL, NULL, NULL, NULL,
+};
 
 const char *MUSIC_ErrorString(int code)
 {
@@ -70,7 +79,14 @@ int MUSIC_Init(int SoundCard, int Address)
     case ProAudioSpectrum:
     case SoundMan16:
     case Adlib:
+        /* 0x68F94; the FM chip is always found here */
         status = AL_Init(SoundCard);
+        if (SoundCard == SoundBlaster && BLASTER_CardHasMixer()) {
+            al_funcs.SetVolume = BLASTER_SetFMVolume;
+            al_funcs.GetVolume = BLASTER_GetFMVolume;
+        }
+        MIDI_SetMidiFuncs(&al_funcs);
+        DSL_InitMusic();
         break;
     case GenMidi:
     case SoundCanvas:
@@ -93,11 +109,31 @@ int MUSIC_Init(int SoundCard, int Address)
     return status;
 }
 
+/* 0x68DE4 */
 void MUSIC_SetVolume(int volume)
 {
-    if (volume < 0)
-        volume = 0;
-    if (volume > 255)
-        volume = 255;
-    music_volume = volume;
+    if (MUSIC_Card == -1)
+        return;
+    DSL_Lock();
+    MIDI_SetVolume(volume);
+    DSL_Unlock();
+}
+
+/* 0x68E94 */
+int MUSIC_PlaySong(const unsigned char *song, int loop)
+{
+    int status;
+
+    if (MUSIC_Card == -1) {
+        MUSIC_ErrorCode = MUSIC_InvalidCard;
+        return MUSIC_Warning;
+    }
+    DSL_Lock();
+    status = MIDI_PlaySong(song, loop);
+    DSL_Unlock();
+    if (status != 0) {
+        MUSIC_ErrorCode = MUSIC_MidiError;
+        return MUSIC_Warning;
+    }
+    return MUSIC_Ok;
 }

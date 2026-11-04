@@ -1,8 +1,35 @@
 #include "task_man.h"
 
-/* MUSIC error 4 is "TaskMan error." The task scheduler is linked in. */
+#include <stddef.h>
 
-int TS_Startup(void)
+static void (*task)(void);
+static unsigned taskrate, elapsed;
+
+void TS_ScheduleTask(void (*function)(void), int rate)
 {
-    return 0;
+    task = function;
+    elapsed = 0;
+    TS_SetTaskRate(rate);
+}
+
+void TS_SetTaskRate(int rate)
+{
+    taskrate = rate > 0 ? (unsigned)rate : 1;
+}
+
+void TS_Terminate(void)
+{
+    task = NULL;
+}
+
+/* Run the task as often as its rate fits in one frame at outrate. */
+void TS_Advance(unsigned outrate)
+{
+    if (!task)
+        return;
+    elapsed += taskrate;
+    while (task && elapsed >= outrate) {
+        elapsed -= outrate;
+        task();
+    }
 }
