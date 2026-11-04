@@ -9,6 +9,7 @@ int MV_PlayVOC3D(const unsigned char *ptr, int pitchoffset, int angle, int dista
     unsigned long callbackval);
 int MV_Pan3D(int handle, int angle, int distance);
 int MV_Kill(int handle);
+int MV_KillAllVoices(void);
 /* The interrupt routine: mixes and returns the next 256 stereo frames. */
 const unsigned short *MV_ServiceVoc(void);
 

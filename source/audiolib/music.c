@@ -137,3 +137,19 @@ int MUSIC_PlaySong(const unsigned char *song, int loop)
     }
     return MUSIC_Ok;
 }
+
+/* 0x68E24 */
+void MUSIC_Continue(void)
+{
+    DSL_Lock();
+    MIDI_ContinueSong();
+    DSL_Unlock();
+}
+
+/* 0x68E2C */
+void MUSIC_Pause(void)
+{
+    DSL_Lock();
+    MIDI_PauseSong();
+    DSL_Unlock();
+}

@@ -19,5 +19,7 @@ const char *MUSIC_ErrorString(int code);
 int MUSIC_Init(int SoundCard, int Address);
 void MUSIC_SetVolume(int volume);
 int MUSIC_PlaySong(const unsigned char *song, int loop);
+void MUSIC_Continue(void);
+void MUSIC_Pause(void);
 
 #endif

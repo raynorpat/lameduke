@@ -204,6 +204,26 @@ void MIDI_Service(void)
     }
 }
 
+/* 0x6BC90 */
+void MIDI_ContinueSong(void)
+{
+    if (loaded)
+        playing = 1;
+}
+
+/* 0x6BCA4 */
+void MIDI_PauseSong(void)
+{
+    int c;
+
+    if (loaded) {
+        playing = 0;
+        for (c = 0; c < 16; c++)
+            if (sendcontrol(c, 123, 0) != 0)
+                break;
+    }
+}
+
 /* 0x6BCD0 */
 void MIDI_StopSong(void)
 {

@@ -20,6 +20,8 @@ int MIDI_Init(void);
 void MIDI_SetMidiFuncs(const midifuncs *f);
 int MIDI_PlaySong(const unsigned char *song, int loop);
 void MIDI_StopSong(void);
+void MIDI_PauseSong(void);
+void MIDI_ContinueSong(void);
 int MIDI_SetVolume(int volume);
 void MIDI_Service(void);
 

@@ -147,6 +147,18 @@ int MV_Kill(int handle)
     return 0;
 }
 
+/* 0x69A26 */
+int MV_KillAllVoices(void)
+{
+    if (!mv_installed) {
+        MV_ErrorCode = 2;
+        return -1;
+    }
+    while (active_head)
+        MV_Kill(active_head->handle);
+    return 0;
+}
+
 /* 0x69B57: with no free voice, the lowest priority one gives way to an
    equal or higher priority. Handles count up from 1, skipping live ones. */
 static voice *allocvoice(int priority)

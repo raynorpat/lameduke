@@ -29,5 +29,6 @@ int FX_PlayVOC3D(const unsigned char *ptr, int pitchoffset, int angle, int dista
     unsigned long callbackval);
 int FX_Pan3D(int handle, int angle, int distance);
 int FX_StopSound(int handle);
+int FX_StopAllSounds(void);
 
 #endif

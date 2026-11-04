@@ -283,3 +283,13 @@ int FX_StopSound(int handle)
     }
     return FX_Ok;
 }
+
+/* 0x6E978 */
+int FX_StopAllSounds(void)
+{
+    if (multivoc_card() && MV_KillAllVoices() != 0) {
+        FX_ErrorCode = FX_MultiVocError;
+        return FX_Warning;
+    }
+    return FX_Ok;
+}
