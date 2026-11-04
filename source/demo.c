@@ -1,4 +1,6 @@
 #include "demo.h"
+#include "global.h"
+#include "premap.h"
 
 #include "platform.h"
 
@@ -108,4 +110,38 @@ int demo_save(int index, const demo_t *demo)
     }
     fclose(fp);
     return 0;
+}
+
+static unsigned char rec_forward[DEMO_MAX], rec_strafe[DEMO_MAX], rec_turn[DEMO_MAX], rec_tics[DEMO_MAX];
+static int rec_bits[DEMO_MAX];
+static demo_t rec = { 0, 0, 0, 0, rec_forward, rec_strafe, rec_turn, rec_tics, rec_bits };
+
+/* 0x18EEB: one sample per unpaused tic. Past 0x3FFF the count stops and
+   the slot after the last kept sample is overwritten. */
+void demo_record(void)
+{
+    int n = rec.count;
+
+    rec_forward[n] = (unsigned char)syncfvel[0];
+    rec_strafe[n] = (unsigned char)syncsvel[0];
+    rec_turn[n] = (unsigned char)syncavel[0];
+    rec_bits[n] = syncbits[0];
+    rec_tics[n] = synctics;
+    rec.count = n + 1 > 0x3FFF ? 0x3FFF : n + 1;
+}
+
+/* 0x1B920: on the way out a recording drops its last sample and goes to
+   mydemo_0.dmo for /v1 /l1, otherwise mydemo_1.dmo. */
+void demo_write(void)
+{
+    int slot = (game_volume == 0 && game_level == 0) ? 0 : 1;
+
+    if (demomode != 1)
+        return;
+    rec.count--;
+    rec.volume = (unsigned char)game_volume;
+    rec.level = (unsigned char)game_level;
+    rec.skill = (unsigned char)game_skill;
+    if (demo_save(slot, &rec) == 0)
+        printf("Wrote mydemo_%d.dmo\n", slot);
 }

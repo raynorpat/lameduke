@@ -22,5 +22,7 @@ typedef struct {
 int demo_load(int index, demo_t *out);
 void demo_free(demo_t *demo);
 int demo_save(int index, const demo_t *demo);
+void demo_record(void);
+void demo_write(void);
 
 #endif

@@ -1,6 +1,7 @@
 /* Sprite creation: EGS 0x12E90 and spawn 0x1F160. */
 
 #include "actors.h"
+#include "demo.h"
 #include "global.h"
 #include "gamedef.h"
 #include "sector.h"
@@ -3012,7 +3013,8 @@ void domovethings(void)
     lockclock += synctics;
     doanimations(synctics);
     if (!gamepaused) {
-        /* pending: demomode 1 records player 0's input here (Task 6) */
+        if (demomode == 1)
+            demo_record();
         moveeffects();
         moveteleporters();
     }

@@ -47,55 +47,6 @@ static int signed_byte(unsigned char v)
     return (int)(signed char)v;
 }
 
-static unsigned char store_byte(int v)
-{
-    if (v > 127)
-        v = 127;
-    if (v < -128)
-        v = -128;
-    return (unsigned char)v;
-}
-
-static int rec_grow(demo_t *demo, int *cap)
-{
-    int next;
-    unsigned char *forward;
-    unsigned char *strafe;
-    unsigned char *turn;
-    unsigned char *tics;
-    int *bits;
-
-    if (demo->count < *cap)
-        return 0;
-    if (*cap >= DEMO_MAX)
-        return -1;
-    next = *cap ? *cap * 2 : 256;
-    if (next > DEMO_MAX)
-        next = DEMO_MAX;
-    forward = (unsigned char *)realloc(demo->forward, (size_t)next);
-    if (!forward)
-        return -1;
-    demo->forward = forward;
-    strafe = (unsigned char *)realloc(demo->strafe, (size_t)next);
-    if (!strafe)
-        return -1;
-    demo->strafe = strafe;
-    turn = (unsigned char *)realloc(demo->turn, (size_t)next);
-    if (!turn)
-        return -1;
-    demo->turn = turn;
-    tics = (unsigned char *)realloc(demo->tics, (size_t)next);
-    if (!tics)
-        return -1;
-    demo->tics = tics;
-    bits = (int *)realloc(demo->bits, (size_t)next * sizeof(int));
-    if (!bits)
-        return -1;
-    demo->bits = bits;
-    *cap = next;
-    return 0;
-}
-
 static void write_frame(const char *path)
 {
     FILE *fp;
@@ -216,17 +167,11 @@ static int play_demo(const demo_t *demo)
     return 0;
 }
 
-static int play_level(int record)
+static int play_level(void)
 {
-    demo_t rec;
-    int cap = 0;
     uint32_t prev;
     int clock_remainder = 0;
 
-    memset(&rec, 0, sizeof rec);
-    rec.volume = (unsigned char)game_volume;
-    rec.level = (unsigned char)game_level;
-    rec.skill = (unsigned char)game_skill;
     prev = timer_ticks();
     present();
     while (!input_poll()) {
@@ -263,23 +208,8 @@ static int play_level(int record)
         domovethings();
         /* pending: gm bit 0 opens the menus and help pages (Task 9); dropped until then */
         ps[myconnectindex].gm &= ~1;
-        if (record && rec_grow(&rec, &cap) == 0) {
-            int n = rec.count;
-            rec.forward[n] = store_byte(fv);
-            rec.strafe[n] = store_byte(sv);
-            rec.turn[n] = store_byte(av);
-            rec.tics[n] = (unsigned char)steps;
-            rec.bits[n] = bits;
-            rec.count = n + 1;
-        }
         present();
     }
-    if (record && rec.count > 0) {
-        int slot = (game_volume == 0 && game_level == 0) ? 0 : 1;
-        if (demo_save(slot, &rec) == 0)
-            printf("Wrote mydemo_%d.dmo\n", slot);
-    }
-    demo_free(&rec);
     return 1;
 }
 
@@ -345,7 +275,8 @@ int main(int argc, char **argv)
     if (game_level_set) {
         newgame(game_volume, game_level, game_skill);
         enterlevel(4);
-        play_level(game_demorec);
+        play_level();
+        demo_write();
     } else {
         int index = 1;
         while (!input_poll()) {

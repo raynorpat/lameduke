@@ -22,7 +22,6 @@ int game_volume;
 int game_level;
 int game_skill;
 int game_level_set;
-int game_demorec;
 int game_quotes;
 int game_debug;
 int user_visibility = 13; /* byte_1257A8, from userdefs.tmp (13 without one) */
@@ -60,7 +59,6 @@ void check_args(int argc, char **argv)
     game_level = 0;
     game_skill = 0;
     game_level_set = 0;
-    game_demorec = 0;
     for (i = 1; i < argc; i++) {
         char *arg = argv[i];
         char flag;
@@ -106,7 +104,7 @@ void check_args(int argc, char **argv)
             game_quotes = 1;
             break;
         case 'r':
-            game_demorec = 1;
+            demomode = 1;
             puts("Demorec mode on...");
             break;
         case 's':

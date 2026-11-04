@@ -10,12 +10,11 @@ int enterlevel(int mode);
 void newgame(int volume, int level, int skill);
 extern int user_visibility;
 
-/* 0-based. /v1 /l1 stores volume 0, level 0. /r sets game_demorec. */
+/* 0-based. /v1 /l1 stores volume 0, level 0. /r sets demomode to 1. */
 extern int game_volume;
 extern int game_level;
 extern int game_skill;
 extern int game_level_set;
-extern int game_demorec;
 /* /q (byte_1257A9) and /d (word_1257AD). Read by code lifted in later tasks. */
 extern int game_quotes;
 extern int game_debug;
