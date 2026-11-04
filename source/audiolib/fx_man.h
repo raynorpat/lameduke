@@ -25,5 +25,9 @@ int FX_SetupCard(int SoundCard, fx_device *device);
 int FX_Init(int SoundCard, int numvoices, int numchannels, int samplebits, unsigned mixrate);
 int FX_SetCallBack(void (*function)(unsigned long));
 int FX_SetVolume(int volume);
+int FX_PlayVOC3D(const unsigned char *ptr, int pitchoffset, int angle, int distance, int priority,
+    unsigned long callbackval);
+int FX_Pan3D(int handle, int angle, int distance);
+int FX_StopSound(int handle);
 
 #endif

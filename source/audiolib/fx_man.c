@@ -195,8 +195,11 @@ int FX_SetVolume(int volume)
     switch (FX_Card) {
     case SoundBlaster:
     case Awe32:
-        BLASTER_SetVolume(volume);
-        MV_SetVolume(volume);
+        /* 0x6E338: a card with a mixer sets it, otherwise multivoc scales */
+        if (BLASTER_CardHasMixer())
+            BLASTER_SetVolume(volume);
+        else
+            MV_SetVolume(volume);
         return 0;
     case ProAudioSpectrum:
     case SoundMan16:
@@ -218,4 +221,65 @@ int FX_SetVolume(int volume)
     default:
         return 0;
     }
+}
+
+static int multivoc_card(void)
+{
+    switch (FX_Card) {
+    case SoundBlaster:
+    case ProAudioSpectrum:
+    case SoundMan16:
+    case Awe32:
+    case SoundSource:
+    case TandySoundSource:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* 0x6E660. Only the multivoc cards are lifted; the shipped setup picks one. */
+int FX_PlayVOC3D(const unsigned char *ptr, int pitchoffset, int angle, int distance, int priority,
+    unsigned long callbackval)
+{
+    int handle;
+
+    if (!multivoc_card()) {
+        FX_ErrorCode = FX_InvalidCard;
+        return FX_Error;
+    }
+    handle = MV_PlayVOC3D(ptr, pitchoffset, angle, distance, priority, callbackval);
+    if (handle == -1) {
+        FX_ErrorCode = FX_MultiVocError;
+        return FX_Warning;
+    }
+    return handle;
+}
+
+/* 0x6E788 */
+int FX_Pan3D(int handle, int angle, int distance)
+{
+    if (!multivoc_card()) {
+        FX_ErrorCode = FX_InvalidCard;
+        return FX_Error;
+    }
+    if (MV_Pan3D(handle, angle, distance) != 0) {
+        FX_ErrorCode = FX_MultiVocError;
+        return FX_Warning;
+    }
+    return FX_Ok;
+}
+
+/* 0x6E898 */
+int FX_StopSound(int handle)
+{
+    if (!multivoc_card()) {
+        FX_ErrorCode = FX_InvalidCard;
+        return FX_Ok;
+    }
+    if (MV_Kill(handle) != 0) {
+        FX_ErrorCode = FX_MultiVocError;
+        return FX_Warning;
+    }
+    return FX_Ok;
 }

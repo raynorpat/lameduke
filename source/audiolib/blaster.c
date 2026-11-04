@@ -1,4 +1,5 @@
 #include "blaster.h"
+#include "dsl.h"
 
 static int blaster_error;
 static void (*blaster_callback)(unsigned long);
@@ -34,9 +35,20 @@ int BLASTER_Init(void)
     return 0;
 }
 
+/* 0x6FDB0. The port stands in for an SB16, which has a mixer. */
+int BLASTER_CardHasMixer(void)
+{
+    return 1;
+}
+
+/* 0x6FBB4, the SB16 branch: both voice volume registers get volume & 0xF8. */
 void BLASTER_SetVolume(int volume)
 {
-    (void)volume;
+    if (volume > 255)
+        volume = 255;
+    if (volume < 0)
+        volume = 0;
+    DSL_SetVoiceLevel((volume & 0xF8) >> 3);
 }
 
 void BLASTER_SetCallBack(void (*function)(unsigned long))
