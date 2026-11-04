@@ -116,6 +116,7 @@ unsigned char show2dwall[(MAXWALLS + 7) >> 3];
    reads them; saveboard writes them back. */
 static short numboardextra;
 static unsigned char boardextra[MAXSPRITES][10];
+unsigned char boardhadextra;
 
 int loadboard(const char *filename)
 {
@@ -173,7 +174,8 @@ int loadboard(const char *filename)
     }
     /* Several shipped maps end after the sprites. The exe's read() then
        returns 0 and the count stays as it was, so the board still loads. */
-    if (fread(&nextra, 2, 1, fp) != 1)
+    boardhadextra = fread(&nextra, 2, 1, fp) == 1;
+    if (!boardhadextra)
         nextra = 0;
     if (nextra < 0 || nextra > MAXSPRITES) {
         fclose(fp);
@@ -238,6 +240,95 @@ int saveboard(const char *filename, int px, int py, int pz, short startang, shor
     fwrite(&numboardextra, 2, 1, fp);
     fwrite(boardextra, 10, (size_t)numboardextra, fp);
     return fclose(fp) == 0 ? 0 : -1;
+}
+
+/* The editor's save: as saveboard, but sprites go out in index order, so
+   a load and save renumbers nothing, and the closing count only when the
+   loaded board had one. */
+int writeboard(const char *filename, int px, int py, int pz, short startang, short startsect)
+{
+    FILE *fp = plat_fopen(filename, "wb");
+    int version = 5, i;
+    short n = 0, nsec = (short)numsectors, nwal = (short)numwalls;
+
+    if (!fp)
+        return -1;
+    fwrite(&version, 4, 1, fp);
+    fwrite(&px, 4, 1, fp);
+    fwrite(&py, 4, 1, fp);
+    fwrite(&pz, 4, 1, fp);
+    fwrite(&startang, 2, 1, fp);
+    fwrite(&startsect, 2, 1, fp);
+    fwrite(&nsec, 2, 1, fp);
+    fwrite(sector, sizeof(sectortype), (size_t)nsec, fp);
+    fwrite(&nwal, 2, 1, fp);
+    fwrite(wall, sizeof(walltype), (size_t)nwal, fp);
+    for (i = 0; i < MAXSPRITES; i++)
+        if (sprite[i].statnum < MAXSTATUS)
+            n++;
+    fwrite(&n, 2, 1, fp);
+    for (i = 0; i < MAXSPRITES; i++)
+        if (sprite[i].statnum < MAXSTATUS)
+            fwrite(&sprite[i], sizeof(spritetype), 1, fp);
+    if (boardhadextra || numboardextra) {
+        fwrite(&numboardextra, 2, 1, fp);
+        fwrite(boardextra, 10, (size_t)numboardextra, fp);
+    }
+    return fclose(fp) == 0 ? 0 : -1;
+}
+
+static int sectorofwallnum(int w)
+{
+    int s;
+
+    for (s = 0; s < numsectors; s++)
+        if (w >= sector[s].wallptr && w < sector[s].wallptr + sector[s].wallnum)
+            return s;
+    return -1;
+}
+
+int checkboard(void (*report)(const char *))
+{
+    char why[96];
+    int s, w, i, bad = 0;
+
+#define DEFECT(...) (snprintf(why, sizeof why, __VA_ARGS__), report(why), bad++)
+    for (s = 0; s < numsectors; s++) {
+        int first = sector[s].wallptr, last = first + sector[s].wallnum - 1;
+
+        if (sector[s].wallnum < 3 || first < 0 || last >= numwalls) {
+            DEFECT("sector %d has walls %d-%d", s, first, last);
+            if (first < 0 || last >= numwalls)
+                continue;
+        }
+        for (w = first; w <= last; w++) {
+            int p = wall[w].point2, nw = wall[w].nextwall, k, n = 0;
+
+            if (p < first || p > last) {
+                DEFECT("wall %d point2 %d leaves sector %d", w, p, s);
+                continue;
+            }
+            if (nw >= numwalls)
+                DEFECT("wall %d nextwall %d out of range", w, nw);
+            else if (nw >= 0 && (wall[nw].nextwall != w || wall[w].nextsector != sectorofwallnum(nw)
+                                 || wall[nw].x != wall[p].x || wall[nw].y != wall[p].y))
+                DEFECT("wall %d nextwall %d does not point back", w, nw);
+            else if (nw < 0 && wall[w].nextsector >= 0)
+                DEFECT("wall %d has nextsector %d but no nextwall", w, wall[w].nextsector);
+            /* each wall is exactly one wall's point2, so the loops close */
+            for (k = first; k <= last; k++)
+                n += wall[k].point2 == w;
+            if (n != 1)
+                DEFECT("wall %d is point2 of %d walls", w, n);
+        }
+    }
+    for (i = 0; i < MAXSPRITES; i++)
+        if (sprite[i].statnum < MAXSTATUS && (sprite[i].sectnum < 0 || sprite[i].sectnum >= numsectors))
+            DEFECT("sprite %d in sector %d", i, sprite[i].sectnum);
+    if (inside(posx, posy, cursectnum) != 1)
+        DEFECT("start is not inside sector %d", cursectnum);
+#undef DEFECT
+    return bad;
 }
 
 int inside(int x, int y, short sect)

@@ -74,6 +74,15 @@ extern short cursectnum;
 extern unsigned char show2dwall[(MAXWALLS + 7) >> 3];
 int loadboard(const char *filename);
 int saveboard(const char *filename, int px, int py, int pz, short startang, short startsect);
+/* The editor's save: sprites in index order, and the closing count only if
+   the loaded board had one (boardhadextra), so an unedited map comes back
+   byte for byte. */
+extern unsigned char boardhadextra;
+int writeboard(const char *filename, int px, int py, int pz, short startang, short startsect);
+/* Reports each broken wall loop, unpaired nextwall/nextsector, sprite
+   outside a real sector, and a start outside its sector; returns the count.
+   Several shipped maps have a few of these, and the game loads them. */
+int checkboard(void (*report)(const char *));
 
 /* 0x4B977. 1 when (x,y) is inside the sector, 0 when it is not, -1 if sect is invalid. */
 int inside(int x, int y, short sect);
