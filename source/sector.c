@@ -475,10 +475,12 @@ int checkhitceiling(short sn)
     short pic = sec->ceilingpicnum;
     signed char fs, cs;
 
+    /* The exe clears only al on a miss, and every caller tests all of eax:
+       the rest still holds 37 * sn, or the picnum in its low word. */
     if (sec->hitag == 0)
-        return 0;
+        return (37 * sn) & ~0xFF;
     if (!(pic == 26 || pic == 35 || pic == 36 || pic == 212))
-        return 0;
+        return pic & 0xFF00;
     sec->ceilingpicnum = (short)darkpic(pic);
     for (j = headspritestat[3]; j >= 0; j = nextspritestat[j])
         if (sprite[j].hitag == sec->hitag && sprite[j].lotag == 3)
