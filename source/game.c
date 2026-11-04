@@ -9,6 +9,7 @@
 
 #include "cache1d.h"
 #include "engine.h"
+#include "math.h"
 #include "display.h"
 #include "board.h"
 #include "draw.h"
@@ -22,7 +23,6 @@
 #include "music.h"
 #include "sndcards.h"
 
-#include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,7 +145,7 @@ static void warp(void)
 
     while (!(keystatus[0x1C] | keystatus[0x9C] | keystatus[0x39] | keystatus[0x01])) {
         if (input_poll())
-            break;
+            return;
         drawview(myconnectindex);
         if (keystatus[0xC9]) {
             ps[0].volume++;
@@ -310,7 +310,7 @@ static int play_demo(const demo_t *demo)
         while ((int32_t)(deadline - timer_ticks()) > 0) {
             if (input_poll())
                 return PLAY_CLOSED;
-            SDL_Delay(1);
+            timer_delay(1);
         }
     }
     return PLAY_DONE;
@@ -339,7 +339,7 @@ static int play_level(void)
         clock_remainder += elapsed * 120;
         irqs = clock_remainder / 1000;
         if (irqs < 1) {
-            SDL_Delay(1);
+            timer_delay(1);
             continue;
         }
         if (irqs > 40)
@@ -463,7 +463,7 @@ void levelscreen(int mode)
         }
         show();
         /* nextpage waited for the 70 Hz retrace */
-        SDL_Delay(14);
+        timer_delay(14);
     }
 }
 
@@ -486,7 +486,8 @@ static void quitgame(void)
                 done = getscorename(slot);
                 show();
             }
-            memcpy(scorenames[slot], typebuf, 31);
+            if (done)
+                memcpy(scorenames[slot], typebuf, 31);
         }
         do {
             if (input_poll())
