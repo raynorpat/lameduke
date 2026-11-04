@@ -33,13 +33,14 @@ F5 and F6 show what the cursor is on. `source/editor/lstub.c` cites the source o
 
 ## Keys that differ from duke3d's editor
 
-- **[ and ]** (3D, pointing at a floor) are the floor heightmap tool, which replaces 1996's slope keys. `[` turns `floorstat` bit 2 on or off. `]` picks the height tile with the tile picker (G, type the number, Enter). The heights are read as a 64×64 grid, and the status line warns when the height tile isn't 64×64. Turning the heightmap off leaves the height tile set. Version 5 has no slopes, and the renderer draws no ceiling heightmaps.
-- **T** on a sprite toggles translucency (bit 2). There is only one level, because v5 sprite `cstat` is one byte.
-- **B** toggles blocking only. v5 has no hitscan bit.
+- **[ and ]** (3D, pointing at a floor) are the floor heightmap tool, which replaces 1996's slope keys. `[` turns `floorstat` bit 2 on or off. `]` picks the height tile with the tile picker (G, type the number, Enter). The renderer reads both the heights and the floor picture as 64×64 grids, and the status line warns when either isn't 64×64. Turning the heightmap off leaves the height tile set. Version 5 has no slopes, and the renderer draws no ceiling heightmaps.
+- **T** toggles translucency on a sprite (bit 2) or a masked wall (bit 128). There is only one level, because v5 sprite `cstat` is one byte and the 1994 renderer tests only one wall bit.
+- **B** toggles blocking only, and **H** leaves sprites alone. v5 has no hitscan bit.
 - **F12** captures the 3D screen to `captNNNN.pcx`. There is no 2D capture.
 - There is no **Alt+K** renderer cycling. The 3D view is the game's 1994 renderer, in the mode `SETUP.DAT` selects.
 - There is no `build.cfg`. The keys are `build.c`'s defaults.
-- Wall and sprite `pal`, sprite `clipdist` and sprite x/y offsets are 1996 fields that v5 can't store. They aren't shown, and copying a wall or sprite carries pal 0.
+- Wall and sprite `pal`, sprite `clipdist` and sprite x/y offsets are 1996 fields that v5 can't store. They aren't shown. Pasting a copied wall or sprite onto a ceiling or floor leaves that surface's pal alone.
+- The file menu (Esc, L) starts in the folder you ran the editor from.
 
 ## The v4 maps
 
