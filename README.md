@@ -46,6 +46,10 @@ The first command starts the attract demos; the second starts episode 1,
 level 1. Use `build\bin\d3d.exe` for these commands in Windows Command Prompt.
 The original release notes are in [LAMEDUKE.TXT](LAMEDUKE.TXT).
 
+`build/bin/build` is the BUILD map editor for this beta's maps, and
+`build/bin/convmap4` converts the version-4 maps `L9.MAP` and `M8.MAP` to
+version 5. See [docs/map-editor.md](docs/map-editor.md).
+
 ## Game data
 
 The repository contains the beta's loose maps, art, scripts, demos, palette,

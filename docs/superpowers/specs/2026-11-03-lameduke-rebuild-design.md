@@ -30,7 +30,7 @@ The first rebuild is done when all of these are true:
 - Multiplayer that talks to anything. Serial and IPX stay as stubs: the functions and call sites remain, they do not open a port or a socket, and startup does not search for another player.
 - A port of `SETUP.EXE`, or any new setup UI. Modernizing setup is a later project. The game reads the `setup.dat` that tool already writes.
 - Mouse-look as the current port implements it (mouse Y changes the horizon).
-- A GRP archive, a map editor, or a content converter.
+- A GRP archive. (A map editor and a v4 map converter were added later: see [the editor design](2026-11-04-build-editor-design.md).)
 - Copying duke3d's game, CON, or rendering implementation into this tree.
 
 ## Anti-goals
@@ -120,6 +120,6 @@ These are calls made while writing this down, not choices the owner stated. Chan
 4. Opening a shipped VOC or MID by converting it first is not part of the pipeline. The game opens the files by the names it already uses.
 5. `setup.dat` keys, A and Z, and the executable's mouse are the controls. Mouse Y does not look up and down.
 6. Multiplayer startup does not open a serial device or a network socket.
-7. `L9.MAP` and `M8.MAP` fail the version check the executable fails. They are not converted to version 5.
+7. `L9.MAP` and `M8.MAP` fail the version check the executable fails. The game does not convert them; `tools/convmap4` does, as a separate step (see [the editor design](2026-11-04-build-editor-design.md)).
 8. The existing CMake build still produces `d3d.exe` for the host, with the Windows, macOS, and Linux platform files left in a state that builds. On a case-sensitive filesystem the shipped, uppercase files load unchanged.
 9. Every command-line flag in the executable's help list does what the executable does with it, `/d` (from `GO.BAT`) and `/e` included.
