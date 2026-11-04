@@ -499,6 +499,41 @@ int gametext(int x, int y, const char *s, int shade)
     return x;
 }
 
+/* The big font as 0x12A40 and 0x14CD0 draw it inline: like gametext, but
+   digits and lowercase sit 2 px low and only capitals on the line. */
+int bigtext(int x, int y, const char *s, int shade)
+{
+    const unsigned char *p = (const unsigned char *)s;
+    int left = x, pic = -1;
+
+    for (; *p; p++) {
+        int dy = 2;
+
+        if (*p == '\n') {
+            x = left;
+            y += 16;
+            continue;
+        }
+        if (*p == ' ') {
+            x += 5;
+            continue;
+        }
+        if (*p >= '0' && *p <= '9')
+            pic = *p + 101;
+        if (*p >= 'a' && *p <= 'z')
+            pic = *p + 26;
+        if (*p >= 'A' && *p <= 'Z') {
+            pic = *p + 32;
+            dy = 0;
+        }
+        if (pic < 0)
+            continue;
+        rotatesprite(x, y + dy, (short)pic, (signed char)shade, 0, 0);
+        x += tilesizx[pic] + 1;
+    }
+    return x;
+}
+
 /* byte_11D3E0 and byte_1257C2: the line being typed. A typed character is
    not followed by a 0; only backspace writes one. */
 char typebuf[160];
@@ -526,9 +561,8 @@ int strget(int x, int y, int shade, int maxlen)
         0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1',
         '2', '3', '0', '.',
     };
-    const unsigned char *p = (const unsigned char *)typebuf;
     playertype *pl = &ps[screenpeek];
-    int i, left = x, pic = -1, pal;
+    int i, pal;
 
     for (i = 0; i < 128; i++) {
         if (!keystatus[i])
@@ -560,31 +594,7 @@ int strget(int x, int y, int shade, int maxlen)
     if (pl->f02 == 2) {
         x = 0;
     } else if (shade & 0x80) {
-        for (; *p; p++) {
-            int dy = 2;
-
-            if (*p == '\n') {
-                x = left;
-                y += 16;
-                continue;
-            }
-            if (*p == ' ') {
-                x += 5;
-                continue;
-            }
-            if (*p >= '0' && *p <= '9')
-                pic = *p + 101;
-            if (*p >= 'a' && *p <= 'z')
-                pic = *p + 26;
-            if (*p >= 'A' && *p <= 'Z') {
-                pic = *p + 32;
-                dy = 0;
-            }
-            if (pic < 0)
-                continue;
-            rotatesprite(x, y + dy, (short)pic, (signed char)(shade & 0x7F), 0, 0);
-            x += tilesizx[pic] + 1;
-        }
+        x = bigtext(x, y, typebuf, shade & 0x7F);
     } else {
         x = minitext(x, y, typebuf, shade & 0x7F);
     }

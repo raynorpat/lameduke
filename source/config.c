@@ -16,10 +16,12 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The 21 bytes at 0x1257A8 that userdefs.tmp keeps. Bytes 2 and 4 are
-   toggled by keys the port has not lifted, and 17-20 are never read; they
-   are kept as the file had them. */
+/* The 21 bytes at 0x1257A8 that userdefs.tmp keeps. 17-20 are never read;
+   they are kept as the file had them. */
 static unsigned char userdefs[21];
+
+int brightness;  /* byte_1257AA: F10 steps it 0-4 */
+int musicon = 1; /* byte_1257AC: M pauses and resumes the song */
 
 static void putword(unsigned char *p, int v)
 {
@@ -33,21 +35,22 @@ static short getword(const unsigned char *p)
 }
 
 /* 0x1B520. Without the file the defaults stand: visibility 13, sound and
-   music 255, mouse 128, sound on (byte 2 and 4 start at 1). */
+   music 255, mouse 128, sound and music on, brightness 1. */
 void load_user_stats(void)
 {
     FILE *fp = plat_fopen("userdefs.tmp", "rb");
 
     demomode = 0;
     if (!fp) {
-        userdefs[2] = 1;
-        userdefs[4] = 1;
+        brightness = 1;
         return;
     }
     if (fread(userdefs, 1, sizeof userdefs, fp) == sizeof userdefs) {
         user_visibility = userdefs[0];
         game_quotes = userdefs[1];
+        brightness = userdefs[2];
         soundon = userdefs[3];
+        musicon = userdefs[4];
         debugmode = getword(userdefs + 5);
         sound_volume = getword(userdefs + 7);
         music_volume = getword(userdefs + 9);
@@ -69,7 +72,9 @@ void save_user_stats(void)
         return;
     userdefs[0] = (unsigned char)user_visibility;
     userdefs[1] = (unsigned char)game_quotes;
+    userdefs[2] = (unsigned char)brightness;
     userdefs[3] = soundon;
+    userdefs[4] = (unsigned char)musicon;
     putword(userdefs + 5, debugmode);
     putword(userdefs + 7, sound_volume);
     putword(userdefs + 9, music_volume);

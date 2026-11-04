@@ -134,6 +134,105 @@ static int demo_hz(const demo_t *demo)
     return 720;
 }
 
+/* 0x14CD0's warp screen (/d, then W): Page Up and Down pick the episode,
+   the arrows the level, and anything but Esc starts it. */
+static void warp(void)
+{
+    char buf[12];
+
+    while (!(keystatus[0x1C] | keystatus[0x9C] | keystatus[0x39] | keystatus[0x01])) {
+        if (input_poll())
+            break;
+        drawview(myconnectindex);
+        if (keystatus[0xC9]) {
+            ps[0].volume++;
+            keystatus[0xC9] = 0;
+        }
+        if (keystatus[0xD1]) {
+            ps[0].volume--;
+            keystatus[0xD1] = 0;
+        }
+        if (keystatus[0xC8] | keystatus[0x48]) {
+            ps[0].level++;
+            keystatus[0x48] = keystatus[0xC8] = 0;
+        }
+        if (keystatus[0x50] | keystatus[0xD0]) {
+            ps[0].level--;
+            keystatus[0x50] = keystatus[0xD0] = 0;
+        }
+        ps[0].volume &= 3;
+        ps[0].level &= 15;
+        if (ps[myconnectindex].f02 != 2) {
+            bigtext(112, 50, "Warp Mode", 0);
+            bigtext(100, 69, "Episode", 0);
+            bigtext(100, 88, "Level", 0);
+        }
+        snprintf(buf, sizeof buf, "%d", ps[0].volume + 1);
+        gametext(210, 67, buf, 0);
+        snprintf(buf, sizeof buf, "%d", ps[0].level + 1);
+        gametext(210, 86, buf, 0);
+        platform_present(framebuffer(), xdim, ydim);
+    }
+    if (!keystatus[0x01])
+        enterlevel(4);
+    keystatus[0x01] = keystatus[0x39] = keystatus[0x9C] = keystatus[0x1C] = 0;
+}
+
+/* 0x14CD0, once a frame in the attract and level loops: F12 captures the
+   screen, F10 steps the brightness, D toggles /d, M the song, S the
+   effects, V the visibility, and K moves the view to the next player. */
+static void functionkeys(void)
+{
+    if (keystatus[0x58]) {
+        keystatus[0x58] = 0;
+        screencapture();
+    }
+    if (keystatus[0x44]) {
+        keystatus[0x44] = 0;
+        if (++brightness > 4)
+            brightness = 0;
+        setbrightness(brightness);
+    }
+    /* pending: T (bit 0x10) types a message to the other players (Task 10) */
+    if (keystatus[0x20]) {
+        keystatus[0x20] = 0;
+        debugmode ^= 1;
+    }
+    if (setup_byte(2) != 0 && keystatus[0x32]) {
+        keystatus[0x32] = 0;
+        musicon ^= 1;
+        if (musicon)
+            MUSIC_Continue();
+        else
+            MUSIC_Pause();
+    }
+    if (setup_byte(1) != 0 && keystatus[0x1F]) {
+        keystatus[0x1F] = 0;
+        soundon ^= 1;
+        if (!soundon)
+            FX_StopAllSounds();
+    }
+    if (keystatus[0x2F]) {
+        keystatus[0x2F] = 0;
+        if (--user_visibility < 7)
+            user_visibility = 16;
+    }
+    if (keystatus[0x25]) {
+        keystatus[0x25] = 0;
+        myconnectindex = connectpoint2[myconnectindex];
+        if (myconnectindex == -1)
+            myconnectindex = connecthead;
+        /* pending: in the 2D map 0x53F42 redraws it; the 3D view clears the border with tile 1170 */
+        if (ps[myconnectindex].f02 == 3)
+            setgamemode();
+        viewsize(myconnectindex);
+    }
+    if (keystatus[0x11] && debugmode && !(ps[screenpeek].gm & 0x10)) {
+        keystatus[0x11] = 0;
+        warp();
+    }
+}
+
 /* How a demo or a level hands back to main. */
 enum { PLAY_DONE, PLAY_CLOSED, PLAY_QUIT, PLAY_NEXTDEMO, PLAY_LEVEL, PLAY_ATTRACT };
 
@@ -165,6 +264,7 @@ static int play_demo(const demo_t *demo)
 
         if (input_poll())
             return PLAY_CLOSED;
+        functionkeys();
         syncfvel[0] = (signed char)signed_byte(demo->forward[i]);
         syncsvel[0] = (signed char)signed_byte(demo->strafe[i]);
         syncavel[0] = (signed char)signed_byte(demo->turn[i]);
@@ -235,6 +335,7 @@ static int play_level(void)
         steps = irqs * per_irq;
         if (steps > 255)
             steps = 255;
+        functionkeys();
         /* getinput 0x30E60 gives nothing while the menu is open. */
         if (ps[myconnectindex].gm & 1) {
             input_clear();

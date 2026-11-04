@@ -5,6 +5,7 @@
 
 void load_user_stats(void);
 void save_user_stats(void);
+extern int brightness, musicon;
 /* 0x1B630 and 0x1B700: save and restore slot 0-7. */
 void saveplayer(int slot);
 void loadplayer(int slot);
