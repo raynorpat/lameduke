@@ -156,10 +156,13 @@ static void drawpointer(short pic)
    keys and mouse pick one. */
 static int runmenu(const menutype *m)
 {
-    if (titlespin >= 7844)
-        titlespin = 0x2000;
-    else
-        titlespin = (short)(titlespin + 348);
+    /* a frame drawn between game loops leaves the spin where it is */
+    if (viewtic) {
+        if (titlespin >= 7844)
+            titlespin = 0x2000;
+        else
+            titlespin = (short)(titlespin + 348);
+    }
     rotatescalesprite(160 << 16, (m->y - tilesizy[m->tile] / 2 - 8) << 16, 8 * titlespin - 4096, titlespin,
         m->tile);
     drawmenutext(m->x, m->y, m->text, 4, cursory);
@@ -173,11 +176,11 @@ static void slider(int y, int *value)
     int shade = 16, i;
 
     if (cursory > y - 2 && cursory < y + 14) {
-        if (keystatus[0x4B]) {
+        if (keystatus[0x4B] && viewtic) {
             cursorx = (short)(cursorx - 8);
             *value = cursorx >= 32 ? cursorx - 32 : 0;
         }
-        if (keystatus[0x4D]) {
+        if (keystatus[0x4D] && viewtic) {
             cursorx = (short)(cursorx + 8);
             *value = cursorx <= 288 ? cursorx - 32 : 255;
         }

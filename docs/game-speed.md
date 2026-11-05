@@ -32,14 +32,14 @@ The two 486 runs differ by 30 s of wall time and by 3312 clock ticks, which is 1
 ## What the port does
 
 - `play_level` runs the loop at `GAME_LOGIC_HZ` = 15 a second, the 486's rate. `synctics` is the ticks the clock gives in 1/15 s: 6 or 12 with music (mean 7.28; on the 486 it was 7.19 to 7.25), and 8 without. Frames are drawn as often as they come.
-- A frame drawn between two loops leaves the drawing's per-frame steps alone (`viewtic` in `view.c`), so walls, quotes and the HUD keep the 486's pace too.
+- A frame drawn between two loops leaves the drawing's per-frame steps alone (`viewtic` in `view.c`), so walls, quotes, the HUD and the menu's title spin and slider keys keep the 486's pace too.
 - The clock follows the exe: 120 Hz until the first song, then 18.2 Hz chained calls when music is on. The episode map screen (0x19650) uses the same clock.
 - Below 15 frames a second the game slows down, as it did on the 486.
 - With `LAMEDUKE_FRAME` set (a frame dump), one loop runs per frame, so frame N always shows the same picture.
 
-## Not changed
+## Attract demos
 
-Attract demos still play at their 720 Hz (music) or 120 Hz pace (`demo_hz`). The same DOSBox hook placed on the demo loop's domovethings call (0x15EB0) shows the exe playing demo 0 at about the real-time `totalclock` rate. That is 109 ticks a second, so the exe takes about a minute where the port takes 10.5 s.
+The exe's demo loop (0x15E53) runs samples while `totalclock` is ahead of `lockclock`. So demos play at the playing machine's clock, whatever clock recorded them. The same DOSBox hook on the demo loop's domovethings call (0x15EB0) saw 1391 samples of demo 0 (5082 tics) go by in about 6180 clock ticks. That is close to real time at 109 ticks a second. The port paces demos with the same clock: 109.2 ticks a second with music (demo 0 takes about 69 s, where it used to take 10.5 s at 720), and 120 without. Only the wall pacing changed. Every demo shows the same frames and samples as before.
 
 ## By eye
 

@@ -124,17 +124,21 @@ static void present(void)
     }
 }
 
-/* sub_102A0 steps the clock by 6 when music is on, otherwise by 1, at 120 Hz.
-   A demo whose tics are all multiples of 6 was recorded on the 6-step clock. */
-static int demo_hz(const demo_t *demo)
+/* totalclock's ticks in t/per seconds. main (0x15BE7) runs sub_102A0 at
+   120 Hz, and it steps by 6 with music on. Once a song starts, TaskMan
+   (0x65CCC) takes the timer and chains sub_102A0 at only 1193182/65536 Hz. */
+static int clock_tics(int t, int per, int *rem)
 {
-    int i;
+    int den = taskman ? 65536 * per : per;
+    int n;
 
-    for (i = 0; i < demo->count; i++) {
-        if (demo->tics[i] % 6)
-            return 120;
-    }
-    return 720;
+    /* a second at most, so the product stays in range after a stall */
+    if (t > per)
+        t = per;
+    *rem += t * (taskman ? 1193182 : 120);
+    n = *rem / den;
+    *rem %= den;
+    return setup_byte(2) != 0 ? n * 6 : n;
 }
 
 /* 0x14CD0's warp screen (/d, then W): Page Up and Down pick the episode,
@@ -264,9 +268,8 @@ static int demo_outcome(void)
 static int play_demo(const demo_t *demo)
 {
     int i;
-    int hz = demo_hz(demo);
-    int remainder = 0;
-    uint32_t deadline = timer_ticks();
+    int clock = 0, target = 0, remainder = 0;
+    uint32_t prev = timer_ticks();
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *trace = getenv("LAMEDUKE_TRACE");
 
@@ -304,33 +307,20 @@ static int play_demo(const demo_t *demo)
             return demo_outcome();
         if (shot && shot[0])
             continue;
-        remainder += tics * 1000;
-        deadline += (uint32_t)(remainder / hz);
-        remainder %= hz;
-        while ((int32_t)(deadline - timer_ticks()) > 0) {
+        /* 0x15E53: samples run while totalclock is ahead of the demo's clock */
+        target += tics;
+        while (clock < target) {
+            uint32_t now;
+
             if (input_poll())
                 return PLAY_CLOSED;
             timer_delay(1);
+            now = timer_ticks();
+            clock += clock_tics((int)(now - prev), 1000, &remainder);
+            prev = now;
         }
     }
     return PLAY_DONE;
-}
-
-/* totalclock's ticks in t/per seconds. main (0x15BE7) runs sub_102A0 at
-   120 Hz, and it steps by 6 with music on. Once a song starts, TaskMan
-   (0x65CCC) takes the timer and chains sub_102A0 at only 1193182/65536 Hz. */
-static int clock_tics(int t, int per, int *rem)
-{
-    int den = taskman ? 65536 * per : per;
-    int n;
-
-    /* a second at most, so the product stays in range after a stall */
-    if (t > per)
-        t = per;
-    *rem += t * (taskman ? 1193182 : 120);
-    n = *rem / den;
-    *rem %= den;
-    return setup_byte(2) != 0 ? n * 6 : n;
 }
 
 /* The single-player loop 0x16F4A runs domovethings once per frame drawn, and
