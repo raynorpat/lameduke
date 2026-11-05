@@ -28,6 +28,8 @@ void setgamemode(void)
        (chained, mode-X, Tseng, Paradise, S3, two stereo modes). */
     int mode = setup_byte(0);
 
+    if (getrendermode() >= 2)
+        mode = 0;
     if (mode == 7) {
         xdim = 640;
         ydim = 480;
@@ -37,7 +39,8 @@ void setgamemode(void)
     }
     ydim16 = 0;
     pageoffset = 0;
-    if (platform_video(xdim, ydim) != 0)
+    if (platform_video(getrendermode() == 2 ? renderwidth : xdim,
+                       getrendermode() == 2 ? renderheight : ydim) != 0)
         errorexit(platform_video_error());
     setbrightness(curbrightness);
 }
@@ -108,6 +111,8 @@ void screencapture(void)
     FILE *fp;
     int i;
 
+    if (getrendermode() >= 2) /* The PCX writer is a 320x200 frame reader. */
+        return;
     snprintf(name, sizeof name, "capt%04d.pcx", capturecount++ % 10000);
     fp = plat_fopen(name, "wb");
     if (!fp) {

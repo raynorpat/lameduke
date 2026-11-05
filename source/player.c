@@ -685,7 +685,7 @@ void viewsize(short p)
 
 static void resizeview(short p)
 {
-    if (setup_byte(0) == 7)
+    if (!game_hires() && setup_byte(0) == 7)
         setview(0, 0, 639, 479);
     else
         viewsize(p);

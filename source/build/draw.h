@@ -33,6 +33,7 @@ void drawline16(int x1, int y1, int x2, int y2, int col);
 void printext16(int xpos, int ypos, short col, short backcol, const char *name, char fontsize);
 void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize);
 void plotpixel(int x, int y, char col);
+void invalidatetile(short pic);
 void nextpage(void);
 void showpage(void);
 
@@ -42,6 +43,9 @@ void showpage(void);
 extern int rendmode;
 int setrendermode(int renderer);
 int getrendermode(void);
+/* Size of renderers 2/3; game coordinates remain 320x200. */
+extern int renderwidth, renderheight;
+int setrenderresolution(int width, int height);
 
 void draw_init(void);
 const unsigned char *framebuffer(void);

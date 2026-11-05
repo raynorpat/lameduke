@@ -133,7 +133,8 @@ static void gl_present8(const unsigned char *src, int swap)
     framedrawn = 0;
     expand(src, tex_w * tex_h);
     SDL_GL_GetDrawableSize(window, &gl_draw_w, &gl_draw_h);
-    gl_fitrect(4, 3, gl_draw_w, gl_draw_h, r);
+    gl_fitrect(getrendermode() == 2 && !ydim16 ? tex_w : 4,
+               getrendermode() == 2 && !ydim16 ? tex_h : 3, gl_draw_w, gl_draw_h, r);
     glsub_flush();
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glMatrixMode(GL_TEXTURE);
@@ -324,7 +325,8 @@ void _glframedrawn(void)
 static void fit_renderer(void)
 {
     if (renderer && tex_w)
-        SDL_RenderSetLogicalSize(renderer, displaymode ? tex_w : 0, displaymode ? tex_w * 3 / 4 : 0);
+        SDL_RenderSetLogicalSize(renderer, displaymode ? tex_w : 0,
+            displaymode ? (getrendermode() == 2 && !ydim16 ? tex_h : tex_w * 3 / 4) : 0);
 }
 
 /* Applies displaymode to the window. Fullscreen takes the display mode
@@ -364,13 +366,17 @@ int platform_video(int width, int height)
 #ifdef USE_OPENGL
     /* The GL window keeps its size; the 8-bit frame is scaled into it. */
     if (glcontext) {
+        if (getrendermode() == 2 && !ydim16) {
+            SDL_SetWindowSize(window, width, height);
+            gl_resvars();
+        }
         video_error = NULL;
         return gl_alloc8(width, height);
     }
 #endif
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-    window_w = width * 3;
-    window_h = height * 3;
+    window_w = getrendermode() == 2 ? width : width * 3;
+    window_h = getrendermode() == 2 ? height : height * 3;
     /* 320x200 was stretched to 4:3 on a VGA monitor. */
     if (width == 320 && height == 200)
         window_h = 720;
@@ -422,6 +428,13 @@ const char *platform_video_error(void)
 
 void platform_present(const void *pixels, int width, int height)
 {
+    if (getrendermode() == 2 && !ydim16) {
+        pixels = framebuffer();
+        width = renderwidth;
+        height = renderheight;
+        if (tex_w != width || tex_h != height)
+            platform_video(width, height);
+    }
 #ifdef USE_OPENGL
     if (glcontext && getrendermode() == 3 && framedrawn) {
         gl_swap();
@@ -451,18 +464,30 @@ unsigned char *platform_capture(int *w, int *h)
     unsigned char *buf;
     int y, row;
 
-    if (!glcontext)
-        return NULL;
-    if (getrendermode() == 3 && framedrawn) {
-        *w = xres;
-        *h = yres;
-        buf = polymost_capture_shader();
-        if (buf)
+    if (!glcontext) {
+        if (getrendermode() == 2 && !ydim16) {
+            *w = renderwidth; *h = renderheight;
+            buf = (unsigned char *)malloc((size_t)*w * *h * 3);
+            if (!buf) return NULL;
+            for (y = 0; y < *w * *h; y++)
+                memcpy(buf + y*3, palette + framebuffer()[y]*3, 3);
             return buf;
+        }
+        return NULL;
+    }
+    if (getrendermode() == 3 && framedrawn) {
+        /* Resolve exactly as presentation does, including supersampling and
+           colour correction, then read the window-sized back buffer. */
+        polymost_present_shader(gl_showrect, gl_draw_w, gl_draw_h, 0);
+        SDL_GL_GetDrawableSize(window, w, h);
     } else {
         /* Exercise the same presentation path as the window, including after
            a mid-run switch. Reading framebuffer() would hide a blank window. */
-        if (rgb && tex_w == xdim && tex_h == ydim)
+        if (getrendermode() == 2 && !ydim16 && (tex_w != renderwidth || tex_h != renderheight))
+            platform_video(renderwidth, renderheight);
+        if (getrendermode() < 2 && (tex_w != xdim || tex_h != ydim))
+            platform_video(xdim, ydim);
+        if (rgb)
             gl_present8(framebuffer(), 0);
         SDL_GL_GetDrawableSize(window, w, h);
     }

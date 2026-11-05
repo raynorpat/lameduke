@@ -134,8 +134,10 @@ static void animatewalls(void)
 {
     int k, mirror = (gotpic[570 >> 3] >> (570 & 7)) & 1;
 
-    if (((gotpic[49 >> 3] >> (49 & 7)) & 1) && waloff[49])
+    if (((gotpic[49 >> 3] >> (49 & 7)) & 1) && waloff[49]) {
         plasma(waloff[49]);
+        invalidatetile(49);
+    }
     for (k = 0; k < numanimwalls; k++) {
         short w = animwall[k].wallnum, pic = wall[w].picnum;
 
@@ -898,6 +900,8 @@ static void reflectfloor(void)
     unsigned char *fb;
     int col, run, src, pitch;
 
+    if (game_hires())
+        return;
     if (!GOTPIC(572) || !waloff[572])
         return;
     /* The loop is the 320-wide frame. Setup mode 7 is 640 and is not mirrored. */
@@ -945,11 +949,17 @@ static void reflectfloor(void)
    own column order; the copy below does that in one pass. */
 static void rendertile(int x, int y, int z, short a, short sect, short pic)
 {
-    int u, v, pitch = framebuffer_pitch();
-    const unsigned char *src = framebuffer();
+    int u, v, savedrenderer = getrendermode(), pitch;
+    const unsigned char *src;
+    /* Camera tiles retain their original indexed 96x96 view. */
+    setrendermode(0);
+    pitch = framebuffer_pitch();
+    src = framebuffer();
 
-    if (!waloff[pic] || tilesizx[pic] != 96 || tilesizy[pic] != 96)
+    if (!waloff[pic] || tilesizx[pic] != 96 || tilesizy[pic] != 96) {
+        setrendermode(savedrenderer);
         return;
+    }
     setview(0, 0, 95, 95);
     drawrooms(x, y, z, a, 100, sect);
     animatesprites(a);
@@ -958,6 +968,8 @@ static void rendertile(int x, int y, int z, short a, short sect, short pic)
         for (v = 0; v < 96; v++)
             waloff[pic][u * 96 + v] = src[v * pitch + u];
     gotpic[pic >> 3] |= (unsigned char)(1 << (pic & 7));
+    setrendermode(savedrenderer);
+    invalidatetile(pic);
     viewsize(myconnectindex);
 }
 

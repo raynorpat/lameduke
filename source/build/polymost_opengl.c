@@ -2462,6 +2462,14 @@ static void polymost_gl_beginrooms(void)
 		resizeglcheck();
 		_glframedrawn();
 		polymost_beginframe_shader(1); //GL 2.1: into the index framebuffer
+        /* Rasterized edges can leave isolated pixels uncovered. Clear only
+           the 3D viewport so they cannot retain a previous camera's pixels. */
+        glsub_flush();
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(windowx1, yres-windowy2-1, xdimen, ydimen);
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_SCISSOR_TEST);
 		if ((!glshbound) && (!glffcleared)) //1.1/1.5: once a frame, as the shader path
 			{ glClear(GL_DEPTH_BUFFER_BIT); glffcleared = 1; }
 

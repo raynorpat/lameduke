@@ -22,6 +22,28 @@
 #define MAXWALLSB 4096 /* the exe; wall sprites use slot 4095 */
 
 static unsigned char frame[MAXXDIM * MAXYDIM];
+static unsigned char *renderframe;
+int renderwidth = 640, renderheight = 480;
+
+int setrenderresolution(int width, int height)
+{
+    unsigned char *buf;
+    if (width < 320 || height < 200 || width > 8192 || height > 8192)
+        return -1;
+    buf = (unsigned char *)calloc((size_t)width, (size_t)height);
+    if (!buf)
+        return -1;
+    if ((getrendermode() == 3 && setgamemode_gl(width, height) != 0)
+        || (getrendermode() == 2 && platform_video(width, height) != 0)) {
+        free(buf);
+        return -1;
+    }
+    free(renderframe);
+    renderframe = buf;
+    renderwidth = width;
+    renderheight = height;
+    return 0;
+}
 
 /* Editor state the exe's engine shares with the 1994 BUILD. */
 short editstatus;                                     /* word_82CEB */
@@ -71,7 +93,7 @@ static int swall[MAXXDIM + 1];               /* 0x139390 */
 static int lwall[MAXXDIM + 4];               /* 0x23C3FC */
 static int skyswall[MAXXDIM + 1], skylwall[MAXXDIM + 1]; /* 0x137590, 0x136B90 */
 static short radarang[MAXXDIM + 1];          /* word_198E90 */
-static int lastx[MAXYDIM + 2];               /* 0x134E08, indexed by y */
+static int lastx[8192 + 2];               /* 0x134E08, indexed by y */
 static int horizlookup[1024];                /* dword_135AD0: 65536/(i-511), centred at 0x1362D0 */
 
 /* Scan and bunch lists (0x188E90..0x17E590). */
@@ -310,6 +332,11 @@ static void scansprites(short sect)
                 spritesx[spritesortcnt] = (int)((long long)(xdimen << 7)
                     * ((imul(ys, cosglobalang) - imul(singlobalang, xs)) >> 6) / yp)
                     + (xdimen << 7);
+            if (yp > 1024 && rendmode >= 2) {
+                /* Sprite sorting compares the same Hor+ coordinates as walls. */
+                spritesx[spritesortcnt] = (xdimen << 7) + (int)((long long)
+                    (spritesx[spritesortcnt] - (xdimen << 7)) * ydim * 4 / (xdim * 3));
+            }
             tspritepicnum[spritesortcnt] = sprite[i].picnum;
             spritesy[spritesortcnt] = yp;
             tspritepal[spritesortcnt] = (sector[sect].ceilingstat & 1)
@@ -2404,18 +2431,18 @@ int getrendermode(void)
    view, 65536 for 90 degrees) is 65536 here, where draw.c's viewingrange is
    the window's width over 320, which is duke3d's xdimenscale. */
 #define xdimenscale ((xdimen << 16) / 320)
-#define viewingrange 65536
-#define xyaspect 65536
-#define yxaspect 65536
+#define viewingrange (rendmode >= 2 ? (int)((long long)xdim * 3 * 65536 / (ydim * 4)) : 65536)
+#define xyaspect (rendmode >= 2 ? 54613 : 65536)
+#define yxaspect (rendmode >= 2 ? 78643 : 65536)
 #define halfxdimen (xdimen >> 1)
 #define cosviewingrangeglobalang cosglobalang
 #define sinviewingrangeglobalang singlobalang
-#define widescreen 0
-#define pixelaspect 65536
-#define ydimenscale xdimenscale
+#define widescreen (rendmode >= 2)
+#define pixelaspect 78643
+#define ydimenscale ((ydimen << 16) / 200)
 /* Polymost draws through pointers into frame. */
-#define frameplace ((intptr_t)frame)
-#define bytesperline pitch()
+#define frameplace ((intptr_t)(rendmode == 2 ? renderframe : frame))
+#define bytesperline (rendmode == 2 ? renderwidth : pitch())
 #define frameoffset polyframeoffset
 #define tempbuf bunchgot
 #define sectorborder sectorstack
@@ -2575,51 +2602,64 @@ void setpolymost2dview(void)
 #undef divscale16
 #undef divscale32
 #endif
+/* Animated tiles are edited in place by plasma and the camera views. */
+void invalidatetile(short pic)
+{
+#if defined(POLYMOST) && defined(USE_OPENGL)
+    int pal;
+    if (getvideoglpath())
+        for (pal = 0; pal < 256; pal++) {
+            gltexinvalidate(pic, pal, 0);
+            gltexinvalidate(pic, pal, 4);
+        }
+#else
+    (void)pic;
+#endif
+}
+
 /* Renderer 3 draws at xres by yres. While Polymost draws, it sees the
    screen, the view window and the horizon at that size, as duke3d's engine
-   gives them; glviewscale is the view's width over the 320-wide one's. */
-static double glviewscale = 1.0;
+   gives them. Renderer 2 uses the same transform into its indexed buffer. */
 static int glsaved[9];
 
 static void glview_begin(void)
 {
-#ifdef USE_OPENGL
     int *v[9] = { &xdim, &ydim, &windowx1, &windowy1, &windowx2, &windowy2, &xdimen, &ydimen, &globalhoriz };
     int i;
 
-    if (rendmode != 3) {
-        glviewscale = 1.0;
+    if (rendmode < 2 || ydim16) {
         return;
     }
     for (i = 0; i < 9; i++)
         glsaved[i] = *v[i];
-    polymost_glpalette();
-    xdim = xres;
-    ydim = yres;
-    windowx1 = glsaved[2] * xres / 320;
-    windowy1 = glsaved[3] * yres / 200;
-    windowx2 = (glsaved[4] + 1) * xres / 320 - 1;
-    windowy2 = (glsaved[5] + 1) * yres / 200 - 1;
+#ifdef USE_OPENGL
+    if (rendmode == 3)
+        polymost_glpalette();
+#endif
+    if (!renderframe)
+        setrenderresolution(renderwidth, renderheight);
+    xdim = rendmode == 3 ? xres : renderwidth;
+    ydim = rendmode == 3 ? yres : renderheight;
+    windowx1 = glsaved[2] * xdim / 320;
+    windowy1 = glsaved[3] * ydim / 200;
+    windowx2 = (glsaved[4] + 1) * xdim / 320 - 1;
+    windowy2 = (glsaved[5] + 1) * ydim / 200 - 1;
     xdimen = windowx2 - windowx1 + 1;
     ydimen = windowy2 - windowy1 + 1;
-    glviewscale = (double)xdimen / glsaved[6];
-    /* draw.c's horizon is a 200-row screen's, its offset from row 100 scaled
-       by the view's width over 320, as duke3d's by xdimenscale */
-    globalhoriz = startumost[0] + (int)((glsaved[8] - 100) * glviewscale) + (ydimen >> 1);
-#endif
+    /* Keep pitch fixed as the horizontal field widens. The 320x200 image
+       was displayed at 4:3, hence the 1.2 pixel-aspect correction. */
+    globalhoriz = startumost[0] + (int)((glsaved[8] - 100) * (double)ydimen / glsaved[7] * 1.2) + (ydimen >> 1);
 }
 
 static void glview_end(void)
 {
-#ifdef USE_OPENGL
     int *v[9] = { &xdim, &ydim, &windowx1, &windowy1, &windowx2, &windowy2, &xdimen, &ydimen, &globalhoriz };
     int i;
 
-    if (rendmode != 3)
+    if (rendmode < 2 || ydim16)
         return;
     for (i = 0; i < 9; i++)
         *v[i] = glsaved[i];
-#endif
 }
 
 /* Polymost takes the sorted list's index, classic the entry's fields. */
@@ -2677,8 +2717,8 @@ void drawmasks(void)
 
 #ifdef POLYMOST
                 if (rendmode)
-                    over = dxb1[mw] <= spritesx[i] * glviewscale / 256.0
-                        && spritesx[i] * glviewscale / 256.0 <= dxb2[mw];
+                    over = dxb1[mw] <= spritesx[i] / 256.0
+                        && spritesx[i] / 256.0 <= dxb2[mw];
                 else
 #endif
                     over = xs >= xb1[mw] && xs <= xb2[mw];
@@ -2721,7 +2761,9 @@ void draw_init(void)
     int i;
 
     initmath();
-    for (i = 0; i <= MAXYDIM + 1; i++)
+    if (!renderframe && setrenderresolution(renderwidth, renderheight) != 0)
+        errorexit("Out of memory!");
+    for (i = 0; i <= 8192 + 1; i++)
         lastx[i] = -1;
     for (i = 0; i < 1024; i++)
         if (i != 511)
@@ -2730,12 +2772,12 @@ void draw_init(void)
 
 const unsigned char *framebuffer(void)
 {
-    return frame;
+    return rendmode == 2 && !ydim16 && renderframe ? renderframe : frame;
 }
 
 int framebuffer_pitch(void)
 {
-    return pitch();
+    return rendmode == 2 && !ydim16 ? renderwidth : pitch();
 }
 
 /* 0x4F679. Draws tile picnum unscaled at (sx,sy), or with flags: 1 centres
@@ -2756,6 +2798,18 @@ void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char
        and 4 is translucent. */
     if (rendmode) {
         glview_begin();
+        if (rendmode >= 2 && !(flags & 3) && sx == 0 && sy == 0 && w == 320 && h == 200
+            && !memchr(waloff[picnum], 255, 320 * 200)) {
+            /* Opaque full-screen pictures have black sides on wide displays. */
+#ifdef USE_OPENGL
+            if (rendmode == 3) {
+                setpolymost2dview();
+                glClearColor(0, 0, 0, 0);
+                glClear(GL_COLOR_BUFFER_BIT);
+            } else
+#endif
+                memset(renderframe, 0, (size_t)renderwidth * renderheight);
+        }
         if (flags & 2)
             polymost_dorotatesprite(sx << 16, sy << 16, 65536, 0, picnum, shade, pal,
                 (flags & 1 ? 2 : 2 | 16) | (flags & 4 ? 1 : 0), windowx1, windowy1, windowx2, windowy2);
@@ -3231,12 +3285,47 @@ void printext16(int xpos, int ypos, short col, short backcol, const char *name, 
 
 void printext256(int xpos, int ypos, short col, short backcol, const char *name, char fontsize)
 {
+    if (rendmode >= 2 && !ydim16) {
+        const unsigned char *font = tables_dat() + (fontsize ? 9856 : 8832);
+        int cw = fontsize ? 4 : 8, ch = fontsize ? 6 : 8, i, r, c;
+        for (i = 0; name[i]; i++)
+            for (r = 0; r < ch; r++)
+                for (c = 0; c < cw; c++) {
+                    int v = font[8 * (unsigned char)name[i] + r] & ((fontsize ? 0x20 : 0x80) >> c);
+                    if (v || backcol >= 0)
+                        plotpixel(xpos + i * cw + c, ypos + r, (char)(v ? col : backcol));
+                }
+        return;
+    }
     printext(frame + frameoffset, pitch(), xdimen, ydimen, xpos, ypos, col, backcol, name, fontsize);
 }
 
 /* A pixel in the current mode: the 2D screen is 640 wide, the 3D one pitch(). */
 void plotpixel(int x, int y, char col)
 {
+    if (rendmode >= 2 && !ydim16) {
+        int w = rendmode == 3 ? xres : renderwidth, h = rendmode == 3 ? yres : renderheight;
+        int area = h * 4 / 3, x1, x2, y1, y2, row;
+        if (!renderframe && setrenderresolution(renderwidth, renderheight) != 0) return;
+        if (area > w) area = w;
+        if (x < 0 || y < 0 || x >= 320 || y >= 200) return;
+        x1 = (w-area)/2 + x*area/320; x2 = (w-area)/2 + (x+1)*area/320;
+        y1 = y*h/200; y2 = (y+1)*h/200;
+#ifdef USE_OPENGL
+        if (rendmode == 3) {
+            setpolymost2dview();
+            polymost_2dcolor((unsigned char)col);
+            glsub_begin(GL_QUADS);
+            glsub_vertex((float)x1,(float)y1,0); glsub_vertex((float)x2,(float)y1,0);
+            glsub_vertex((float)x2,(float)y2,0); glsub_vertex((float)x1,(float)y2,0);
+            glsub_end();
+            return;
+        }
+#endif
+        for (row = y1; row < y2; row++)
+            memset(renderframe + row*w + x1, (unsigned char)col, (size_t)(x2-x1));
+        return;
+    }
     if (x >= 0 && y >= 0 && x < xdim && y < ydim)
         frame[y * (ydim16 ? 640 : pitch()) + x] = (unsigned char)col;
 }

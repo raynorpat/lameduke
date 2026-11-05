@@ -62,4 +62,6 @@ extern int bposx[MAXSPRITES], bposy[MAXSPRITES], bposz[MAXSPRITES];
 #define debugmode game_debug         /* word_1257AD, set by /d */
 extern int game_debug;
 
+int game_hires(void);
+
 #endif

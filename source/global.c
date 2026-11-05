@@ -1,4 +1,10 @@
 #include "global.h"
+#include "draw.h"
+
+int game_hires(void)
+{
+    return getrendermode() >= 2;
+}
 
 int sound_volume = 255; /* word_1257AF, from userdefs.tmp (255 without one) */
 int music_volume = 255; /* word_1257B1, from userdefs.tmp (255 without one) */

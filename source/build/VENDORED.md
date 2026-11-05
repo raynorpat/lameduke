@@ -107,7 +107,8 @@ Local changes, in `polymost.c` and `polymost_soft.c`:
   and masked walls take their sector's `floorpal` and sprites `tspritepal`
   (the sector's pal, or the player colour `animatesprites` sets). Sprites
   have no offsets, and their shade is classic's `shade + 6 + sectorshade`. There are no slopes: floor and ceiling stat bit 2 (a heightmap
-  here) is masked off, so heightmap floors draw flat, and `getzsofslope`,
+  here) is masked off in the flat surface pass; renderer 3 adds the terrain
+  mesh described below, while renderer 2 draws it flat. `getzsofslope`,
   `getflorzofslope` and `getceilzofslope` (in `draw.c`) return the flat
   `ceilingz`/`floorz`.
 - The visible sprites are collected by `draw.c`'s `scansprites`, the classic
@@ -125,18 +126,19 @@ Local changes, in `polymost.c` and `polymost_soft.c`:
 
 `draw.c` supplies the rest of what duke3d's engine gives `polymost.c`, as
 macros and small functions around the `#include`: `draw.c`'s statics are
-used directly; `viewingrange`, `xyaspect` and `yxaspect` are 65536 (a 90
-degree view at 320x200's aspect, as classic draws it), `xdimenscale` is
-`draw.c`'s `viewingrange`, `frameplace` is the frame and `bytesperline` its
-pitch; `tempbuf`, `sectorborder` and `sintable` map to `bunchgot`,
+used directly; renderer 1 uses the 90-degree 320x200 aspect, while
+renderers 2/3 use the target dimensions and Hor+ aspect described below.
+`xdimenscale` scales by view width, `frameplace` chooses the renderer's
+frame and `bytesperline` its pitch; `tempbuf`, `sectorborder` and `sintable` map to `bunchgot`,
 `sectorstack` and `sintable()`; `wallfront` is mapped to duke3d's 0/1
-answer; `animateoffs` drops its second argument; `widescreen` is 0.
+answer; `animateoffs` drops its second argument. Renderer 1 keeps its original
+320x200 aspect; renderers 2/3 use the Hor+ and 2D transforms below.
 `rotatesprite(sx, sy, picnum, shade, flags, pal)` is drawn as
 `polymost_dorotatesprite(sx<<16, sy<<16, 65536, 0, picnum, shade, pal,
 dastat)` with `dastat` 2 (320x200 coordinates), plus 8 and the whole screen
 as the clip when flag 2 (the view window) is off, 16 when flag 1 (centre) is
 off and 1 for flag 4 (translucent); `rotatescalesprite` uses `dastat` 2|8
-clipped to the view window. The 2D stays at 320x200.
+clipped to the view window. The game keeps its 320x200 layout coordinates.
 
 Known drift from classic in renderers 1 and 2: Polymost's software path has
 no distance shading (upstream), and `rotatescalesprite` centres on the tile's
@@ -166,22 +168,63 @@ Renderer 3, local changes for the OpenGL backend:
   fades, so `palfadedelta` is 0, and its sky no distance shade
   (`globalpisibility` 0). `asm1`, `asm2` and `globalpolytype` exist only for
   `polymost_fillpolygon`, which nothing calls.
-- While Polymost draws in renderer 3 (`glview_begin`/`glview_end` around
-  each call), `xdim`/`ydim` are `xres`/`yres` and the view window is scaled
-  from 320x200 to that size. The horizon is `draw.c`'s offset from row 100
-  scaled by the view's width over 320, as duke3d's by `xdimenscale`. The
-  aspect is duke3d's without `widescreen`: square pixels, so at 16:9 the 4:3
-  view loses rows at the top and bottom (Hor+ is to come). `drawmasks`
-  scales `spritesx` to compare it with Polymost's `dxb1`/`dxb2`.
+- `glview_begin`/`glview_end` temporarily expose the actual target size to
+  renderers 2/3 and restore the game's logical view afterward. Renderer 3
+  uses `xres`/`yres`; renderer 2 has a separate indexed buffer. Hor+ uses
+  viewingrange = width*3/(height*4), with the 4:3 pixel aspect and the horizon
+  scaled by height, preserving vertical field of view while looking up/down.
+  Sprite sorting uses those same projected coordinates, without scaling
+  them a second time. Face sprites use the wall pass's eye-depth units
+  (`gxyaspect*gyxscale`), preserving distance fog under the new aspect.
 - `polymost_fogvis` shades at this engine's classic wall rate
   (`depth>>(visibility-3)` shades, `draw.c`'s `wallscan`) instead of
   duke3d's `globalvisibility` and sector visibility, which the 1994 engine
   doesn't have. Sprite fog is twice the wall rate, matching Classic's
   `depth>>(visibility+4)` on a depth scaled by 256. Flat floors and ceilings
   use 4/5 of the wall rate, matching `hlinedriver`'s distance scale.
-- The HUD and 2D drawn with `rotatesprite` come out through Polymost at the
-  window's size; text, fills and anything else the game draws into the 8-bit
-  frame aren't shown in renderer 3 yet.
+- HUD sprites, text and pixels draw at full target resolution in a centered
+  4:3 area, with 320x200 game coordinates. `polymost_dorotatesprite` uses
+  duke3d's widescreen path and the beta's 1.2 pixel aspect. `printext256`
+  emits scaled glyph pixels; `plotpixel` emits indexed software rectangles
+  or GL quads, including the index-FBO path. Opaque 320x200 full-screen
+  pictures clear their sides to black. The beta's actual status tile 1381
+  is 320x22 with zero picanm offsets (not 32 rows); its original placement
+  centered at (160,189) is preserved, about 119 rows tall at 1080p.
+- `setrenderresolution(w,h)` (draw.h) allocates the renderer-2 frame and
+  applies an active renderer's target size, returning -1 on invalid sizes,
+  allocation or video failure. Accepted sizes are 320..8192 by 200..8192;
+  defaults are 640x480. It does not change the saved logical view. The
+  software rasterizer's row-edge scratch array supports 8192 rows.
+  `LAMEDUKE_RESOLUTION=WxH` is an inert game test hook until Video Options
+  calls the API. `setgamemode` ignores the setup mode byte in renderers 2/3.
+- Heightmap floors in renderer 3 add a depth-tested mesh after the opaque
+  world pass. The 64x64 height tile repeats in world coordinates, with one
+  sample per 16 map units and z = floorz - (sample << 8), matching the beta's
+  26.6 ray-grid coordinates. Inner wall loops are joined to the outer
+  boundary by visible bridges; coincident bridge corners are excluded from
+  strict ear-interior tests. The resulting boundary is ear-triangulated; each
+  triangle clips the 16-unit grid, split along each cell's diagonal, using
+  linear height interpolation. The existing polygon mapper supplies texture
+  filtering, palette shading, pitch and near clipping. Renderer 2 remains
+  flat. The mesh uses the heightmap's direct color-tile coordinates, as the
+  beta does, rather than the flat floor's slope/panning rules.
+- Frame readers: `view.c`'s 320-pitch reflective-floor postprocess (tile 572)
+  is skipped in 2/3. The 96x96 mirror (570) and camera-monitor (1408) tile
+  copies are emulated by temporarily selecting Classic for that offscreen
+  render, copying its indexed pixels, and restoring the selected renderer.
+  Plasma (49) edits tile memory, not the high-resolution frame, and remains
+  enabled. `invalidatetile` refreshes palette and index texture caches after
+  plasma or camera/mirror edits, including edits while another renderer is
+  active. The fixed 320x200 F12 PCX writer is skipped in 2/3; the debug BMP
+  capture uses full-resolution presentation. `game_hires` gates player and
+  premap setup-mode-7 tests. SETUP.DAT is never written.
+- GL clears only the 3D viewport's color before drawing it: rasterization
+  gaps cannot retain a previous camera's pixels after an FBO recreation or
+  renderer switch. `platform_capture` resolves the same present shader as
+  the window, then reads the drawable, so supersampling captures remain
+  window-sized and include color correction. Renderer 2 fills the window
+  through either SDL or retained GL; Classic's retained-GL presentation
+  keeps its 4:3 bars.
 
 `source/build/math.h` is now `buildmath.h`: with `source/build` on the
 include path, MSVC found it for `polymost.c`'s `<math.h>`.

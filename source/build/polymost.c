@@ -497,7 +497,7 @@ void domost (float x0, float y0, float x1, float y1)
 			ny1 = (dx1-x0)*slop + y0;
 
 				//      dx0           dx1
-				//       ³             ³
+				//       ï¿½             ï¿½
 				//----------------------------
 				//     t0+=0         t1+=0
 				//   vsp[i].cy[0]  vsp[i].cy[1]
@@ -1258,6 +1258,214 @@ static void polymost_scansector (int32_t sectnum)
 	} while (sectorbordercnt > 0);
 }
 
+/* Heightmap floors use the beta's repeating 64x64 tile: one sample per
+   16 map units, z = floorz - (height << 8). Clip the grid to an ear
+   triangulation of the sector so non-rectangular boundaries stay exact. */
+#ifdef USE_OPENGL
+typedef struct { double x, y; } terrainpoint;
+
+static double terraincross(terrainpoint a, terrainpoint b, terrainpoint c)
+{
+    return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+
+static double terrainheight(short sect, double x, double y)
+{
+    const unsigned char *h = waloff[sector[sect].floorheinum];
+    int ix = (int)floor(x/16), iy = (int)floor(y/16);
+    double fx = x/16-ix, fy = y/16-iy;
+    double a = h[((ix&63)<<6)|(iy&63)], b = h[(((ix+1)&63)<<6)|(iy&63)];
+    double c = h[((ix&63)<<6)|((iy+1)&63)], d = h[(((ix+1)&63)<<6)|((iy+1)&63)];
+    return sector[sect].floorz-256*(fx >= fy ? a+(b-a)*fx+(d-b)*fy : a+(d-c)*fx+(c-a)*fy);
+}
+
+static void terrainpoly(short sect, terrainpoint *v, int n)
+{
+    double wx[12], wy[12], wz[12], cx[12], cy[12], cz[12];
+    double px[12], py[12], dd[12], uu[12], vv[12];
+    double det, r, ox, oy;
+    int i, j, m = 0;
+    for (i=0;i<n;i++) {
+        wx[i]=(v[i].y-globalposy)*gcosang-(v[i].x-globalposx)*gsinang;
+        wy[i]=(terrainheight(sect,v[i].x,v[i].y)-globalposz)*gyxscale;
+        wz[i]=(v[i].x-globalposx)*gcosang2+(v[i].y-globalposy)*gsinang2;
+    }
+    /* Clip at the same close plane as walls before perspective division. */
+    for(i=0;i<n;i++) {
+        j=(i+1)%n;
+        if(wz[i]>=SCISDIST) {cx[m]=wx[i];cy[m]=wy[i];cz[m++]=wz[i];}
+        if((wz[i]>=SCISDIST)!=(wz[j]>=SCISDIST)) {
+            r=(SCISDIST-wz[i])/(wz[j]-wz[i]);
+            cx[m]=wx[i]+r*(wx[j]-wx[i]);cy[m]=wy[i]+r*(wy[j]-wy[i]);cz[m++]=SCISDIST;
+        }
+    }
+    if(m<3)return;
+    /* Recover world coordinates for the texture at each clipped vertex. */
+    for(i=0;i<m;i++) {
+        px[i]=ghalfx*cx[i]/cz[i]+ghalfx;py[i]=cy[i]/cz[i]+ghoriz;
+        dd[i]=gxyaspect*gyxscale/cz[i];
+        ox=cz[i]*65536.0/viewingrange;
+        oy=cx[i];
+        r=gcosang*gcosang+gsinang*gsinang;
+        uu[i]=(globalposx+(ox*gcosang-oy*gsinang)/r)/16*dd[i];
+        vv[i]=(globalposy+(ox*gsinang+oy*gcosang)/r)/16*dd[i];
+    }
+    /* A convex clipped polygon is planar inside this grid triangle. */
+    det=px[0]*(py[1]-py[2])+px[1]*(py[2]-py[0])+px[2]*(py[0]-py[1]);
+    if(fabs(det)<1e-10)return;
+#define TERRAINPLANE(a,b,c,q) \
+    a=((py[1]-py[2])*q[0]+(py[2]-py[0])*q[1]+(py[0]-py[1])*q[2])/det; \
+    b=((px[2]-px[1])*q[0]+(px[0]-px[2])*q[1]+(px[1]-px[0])*q[2])/det; \
+    c=q[0]-px[0]*a-py[0]*b
+    TERRAINPLANE(gdx,gdy,gdo,dd);
+    TERRAINPLANE(gux,guy,guo,uu);
+    TERRAINPLANE(gvx,gvy,gvo,vv);
+#undef TERRAINPLANE
+    /* drawpoly expects clockwise screen winding. */
+    if(det<0)for(i=0;i<m/2;i++){j=m-1-i;ox=px[i];px[i]=px[j];px[j]=ox;oy=py[i];py[i]=py[j];py[j]=oy;}
+    pow2xsplit=0; FOGSCALED(GLFOG_FLAT,drawpoly(px,py,m,METH_LAYERS));
+}
+
+static void terraincell(short sect, terrainpoint *tri, int x, int y, double sign)
+{
+    terrainpoint a[12], b[12], c[3];
+    int n=4,k,i,j,m,t;
+    a[0].x=a[3].x=x;a[1].x=a[2].x=x+16;
+    a[0].y=a[1].y=y;a[2].y=a[3].y=y+16;
+    for(k=0;k<3&&n>=3;k++) {
+        m=0;
+        for(i=0;i<n;i++) {
+            double p,q,r;
+            j=(i+1)%n;p=sign*terraincross(tri[k],tri[(k+1)%3],a[i]);q=sign*terraincross(tri[k],tri[(k+1)%3],a[j]);
+            if(p>=0)b[m++]=a[i];
+            if((p>=0)!=(q>=0)){r=p/(p-q);b[m].x=a[i].x+(a[j].x-a[i].x)*r;b[m++].y=a[i].y+(a[j].y-a[i].y)*r;}
+        }
+        n=m;memcpy(a,b,n*sizeof(a[0]));
+    }
+    /* Split at the cell diagonal too: every emitted triangle is planar. */
+    for(t=0;t<2;t++) {
+        terrainpoint d[12];m=0;
+        for(i=0;i<n;i++) {
+            double p,q,r;j=(i+1)%n;
+            p=(a[i].x-x)-(a[i].y-y);q=(a[j].x-x)-(a[j].y-y);
+            if(t){p=-p;q=-q;}
+            if(p>=0)d[m++]=a[i];
+            if((p>=0)!=(q>=0)){r=p/(p-q);d[m].x=a[i].x+(a[j].x-a[i].x)*r;d[m++].y=a[i].y+(a[j].y-a[i].y)*r;}
+        }
+        for(i=1;i+1<m;i++){c[0]=d[0];c[1]=d[i];c[2]=d[i+1];terrainpoly(sect,c,3);}
+    }
+}
+
+/* Join each inner wall loop to the outer boundary along a visible segment.
+   Duplicate bridge endpoints make a weakly simple polygon; the ear test
+   below ignores coincident corners and tests strict triangle interiors. */
+static int terrainoutline(short sect, terrainpoint *v)
+{
+    static terrainpoint points[MAXWALLS], joined[MAXWALLS*2];
+    static int starts[MAXWALLS], counts[MAXWALLS];
+    static unsigned char seen[MAXWALLS];
+    sectortype *s=&sector[sect];
+    int first=s->wallptr, end=first+s->wallnum, loops=0, used=0, outer=0;
+    int i,j,k,n,w,loop;
+    double largest=0;
+    memset(seen,0,(size_t)s->wallnum);
+    for(w=first;w<end;w++)if(!seen[w-first]) {
+        int start=used, next=w;
+        double area=0;
+        do {
+            if(next<first||next>=end||seen[next-first])return 0;
+            seen[next-first]=1;
+            points[used].x=wall[next].x;points[used++].y=wall[next].y;
+            next=wall[next].point2;
+        }while(next!=w);
+        starts[loops]=start;counts[loops]=used-start;
+        for(i=start;i<used;i++) {
+            j=i+1<used?i+1:start;
+            area+=points[i].x*points[j].y-points[j].x*points[i].y;
+        }
+        if(fabs(area)>largest){largest=fabs(area);outer=loops;}
+        loops++;
+    }
+    n=counts[outer];memcpy(v,points+starts[outer],n*sizeof(v[0]));
+    for(loop=0;loop<loops;loop++)if(loop!=outer) {
+        int oi=-1,hi=-1,hn=counts[loop],hs=starts[loop];
+        double best=1e100;
+        for(i=0;i<n;i++)for(j=0;j<hn;j++) {
+            terrainpoint a=v[i],b=points[hs+j];
+            double dx=a.x-b.x,dy=a.y-b.y,d=dx*dx+dy*dy;
+            if(d>=best||!inside((int)((a.x+b.x)*.5),(int)((a.y+b.y)*.5),sect))continue;
+            for(k=0;k<s->wallnum+n;k++) {
+                terrainpoint c,e;
+                double ac,ae,ca,cb;
+                if(k<s->wallnum) {
+                    w=first+k;c.x=wall[w].x;c.y=wall[w].y;
+                    e.x=wall[wall[w].point2].x;e.y=wall[wall[w].point2].y;
+                }else{w=k-s->wallnum;c=v[w];e=v[(w+1)%n];}
+                if((a.x==c.x&&a.y==c.y)||(a.x==e.x&&a.y==e.y)
+                    ||(b.x==c.x&&b.y==c.y)||(b.x==e.x&&b.y==e.y))continue;
+                if(max(a.x,b.x)<min(c.x,e.x)||max(c.x,e.x)<min(a.x,b.x)
+                    ||max(a.y,b.y)<min(c.y,e.y)||max(c.y,e.y)<min(a.y,b.y))continue;
+                ac=terraincross(a,b,c);ae=terraincross(a,b,e);
+                ca=terraincross(c,e,a);cb=terraincross(c,e,b);
+                if(((ac<=0&&ae>=0)||(ac>=0&&ae<=0))&&((ca<=0&&cb>=0)||(ca>=0&&cb<=0)))break;
+            }
+            if(k==s->wallnum+n){oi=i;hi=j;best=d;}
+        }
+        if(oi<0)return 0;
+        k=0;
+        for(i=0;i<=oi;i++)joined[k++]=v[i];
+        for(j=0;j<=hn;j++)joined[k++]=points[hs+(hi+j)%hn];
+        joined[k++]=v[oi];
+        for(i=oi+1;i<n;i++)joined[k++]=v[i];
+        n=k;memcpy(v,joined,n*sizeof(v[0]));
+    }
+    return n;
+}
+
+static void polymost_heightmaps(void)
+{
+    short sect;
+    for(sect=0;sect<numsectors;sect++) {
+        sectortype *s=&sector[sect];
+        static terrainpoint v[MAXWALLS*2];
+        static int ids[MAXWALLS*2];
+        terrainpoint tri[3];
+        int n,i,j,k,ear,guard=0;
+        double area=0,sign;
+        if(!(s->floorstat&2)||!(gotsector[sect>>3]&(1<<(sect&7)))||s->floorheinum<0||s->floorheinum>=MAXTILES||!waloff[s->floorheinum]||tilesizx[s->floorheinum]!=64||tilesizy[s->floorheinum]!=64)continue;
+        globalpicnum=s->floorpicnum;globalshade=s->floorshade;globalpal=s->floorpal;
+        n=terrainoutline(sect,v);
+        for(i=0;i<n;i++)ids[i]=i;
+        for(i=0;i<n;i++)area+=v[i].x*v[(i+1)%n].y-v[(i+1)%n].x*v[i].y;
+        sign=area>=0?1:-1;
+        while(n>=3&&guard++<s->wallnum*s->wallnum) {
+            ear=-1;
+            for(i=0;i<n;i++) {
+                tri[0]=v[ids[(i+n-1)%n]];tri[1]=v[ids[i]];tri[2]=v[ids[(i+1)%n]];
+                if(sign*terraincross(tri[0],tri[1],tri[2])<=0)continue;
+                for(j=0;j<n;j++) {
+                    if(j==i||j==(i+n-1)%n||j==(i+1)%n)continue;
+                    for(k=0;k<3;k++)if(v[ids[j]].x==tri[k].x&&v[ids[j]].y==tri[k].y)break;
+                    if(k<3)continue;
+                    for(k=0;k<3;k++)if(sign*terraincross(tri[k],tri[(k+1)%3],v[ids[j]])<=0)break;
+                    if(k==3)break;
+                }
+                if(j==n){ear=i;break;}
+            }
+            if(ear<0)break;
+            {
+                int x,y,x1=(int)floor(min(tri[0].x,min(tri[1].x,tri[2].x))/16)*16;
+                int y1=(int)floor(min(tri[0].y,min(tri[1].y,tri[2].y))/16)*16;
+                int x2=(int)ceil(max(tri[0].x,max(tri[1].x,tri[2].x))/16)*16;
+                int y2=(int)ceil(max(tri[0].y,max(tri[1].y,tri[2].y))/16)*16;
+                for(x=x1;x<x2;x+=16)for(y=y1;y<y2;y+=16)terraincell(sect,tri,x,y,sign);
+            }
+            for(i=ear;i<n-1;i++)ids[i]=ids[i+1];n--;
+        }
+    }
+}
+#endif
+
 /*
 ================
 polymost_drawrooms
@@ -1285,7 +1493,7 @@ void polymost_drawrooms ()
 		//gchang&gshang are cos&sin of this angle (respectively)
 	gyxscale = ((double)xdimenscale)/131072.0;
 	gxyaspect = ((double)xyaspect*(double)viewingrange)*(5.0/(65536.0*262144.0));
-	gviewxrange = ((double)viewingrange)*((double)xdimen)/(32768.0*1024.0);
+	gviewxrange = gxyaspect*gyxscale; //face sprites use the same eye-depth units as walls
 	gcosang = ((double)cosglobalang)/262144.0;
 	gsinang = ((double)singlobalang)/262144.0;
 	gcosang2 = gcosang*((double)viewingrange)/65536.0;
@@ -1456,6 +1664,7 @@ void polymost_drawrooms ()
 	}
 #ifdef USE_OPENGL
 	polymost_gl_endrooms();
+    if(rendmode == 3) polymost_heightmaps();
 #endif
 
 	enddrawing();
@@ -2052,7 +2261,7 @@ void polymost_dorotatesprite (int32_t sx, int32_t sy, int32_t z, short a, short 
 	signed char dashade, unsigned char dapalnum, unsigned short dastat, int32_t cx1, int32_t cy1, int32_t cx2, int32_t cy2)
 {
 	int32_t i, n, nn, x, zz, xoff, yoff, xsiz, ysiz, method;
-	int32_t rsxyaspect = xyaspect, rsyxaspect = yxaspect;
+	int32_t rsxyaspect = rendmode >= 2 ? 54613 : xyaspect, rsyxaspect = rendmode >= 2 ? 78643 : yxaspect;
 	int32_t ogpicnum, ogshade, ogpal, oxdimen, oydimen;
 	intptr_t ofoffset;
 	double ogchang, ogshang, ogctang, ogstang, oghalfx, oghoriz, fx, fy, x1, y1, x2, y2;

@@ -13,6 +13,7 @@
 #include "draw.h"
 #include "engine.h"
 #include "buildmath.h"
+#include "sdl_window.h"
 
 #include "platform.h"
 
@@ -135,15 +136,23 @@ void game_setrenderer(int renderer)
 {
     int prev = getrendermode();
 
-    /* shortcut: renderer 3's window is 1280x720 until duke.cfg sets it */
-    if (renderer >= 3 && !getvideoglpath())
-        setgamemode_gl(1280, 720);
+    /* Inert test hook until Video Options supplies the resolution. */
+    const char *size = getenv("LAMEDUKE_RESOLUTION");
+    int w, h;
+    if (size && sscanf(size, "%dx%d", &w, &h) == 2)
+        setrenderresolution(w, h);
+    if (renderer >= 3)
+        setgamemode_gl(renderwidth, renderheight);
     if (setrendermode(renderer) != (renderer > 3 ? 3 : renderer)) {
         printf("%s; %s\n", renderer >= 3 ? "OpenGL renderer unavailable"
                                                : "Polymost renderer unavailable in this build",
                prev ? "keeping the current renderer." : "using the classic renderer.");
         setrendermode(prev);
     }
+    if (getrendermode() == 2)
+        platform_video(renderwidth, renderheight);
+    else if (prev >= 2 && getrendermode() < 2)
+        setgamemode();
 }
 
 /* 0x2F190. A lift (SE 17) placed with shade over 16 sets every other lift
@@ -328,7 +337,7 @@ int enterlevel(int mode)
     memset(syncavel, 0, sizeof syncavel);
     memset(syncbits, 0, sizeof syncbits);
     /* pending: 0x11120 holds every node at the start line (multiplayer task) */
-    if (setup_byte(0) == 7)
+    if (!game_hires() && setup_byte(0) == 7)
         setview(0, 0, 639, 479);
     else
         viewsize(0);
