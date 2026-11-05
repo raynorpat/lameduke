@@ -2584,6 +2584,36 @@ void setpolymost2dview(void)
     fog_is_on = 0;
     _glframedrawn();
 }
+
+/* Tile browser uses editor logical pixels while GL draws drawable pixels. */
+void editor_tile_begin(void)
+{
+    if (rendmode == 3 && !ydim16) {
+        setpolymost2dview();
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+}
+
+int editor_tile_draw(int x, int y, int tile, int size)
+{
+    int result, area;
+    if (rendmode != 3 || ydim16) return -1;
+    area = yres * 4 / 3;
+    if (area > xres) area = xres;
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glTranslatef((float)(xres - area) / 2, 0, 0);
+    glScalef((float)area / xdim, (float)yres / ydim, 1);
+    result = polymost_drawtilescreen(x, y, tile, size);
+    glPopMatrix();
+    return result;
+}
+
+#else
+void editor_tile_begin(void) {}
+int editor_tile_draw(int x, int y, int tile, int size)
+{ (void)x; (void)y; (void)tile; (void)size; return -1; }
 #endif
 
 #undef xdimenscale
@@ -2632,6 +2662,7 @@ void invalidatetile(short pic)
    screen, the view window and the horizon at that size, as duke3d's engine
    gives them. Renderer 2 uses the same transform into its indexed buffer. */
 static int glsaved[9];
+static int glsearchx, glsearchy;
 
 static void glview_begin(void)
 {
@@ -2649,8 +2680,13 @@ static void glview_begin(void)
 #endif
     if (!renderframe)
         setrenderresolution(renderwidth, renderheight);
+    glsearchx = searchx; glsearchy = searchy;
     xdim = rendmode == 3 ? xres : renderwidth;
     ydim = rendmode == 3 ? yres : renderheight;
+    if (editstatus) {
+        searchx = searchx * xdim / glsaved[0];
+        searchy = searchy * ydim / glsaved[1];
+    }
     windowx1 = glsaved[2] * xdim / 320;
     windowy1 = glsaved[3] * ydim / 200;
     windowx2 = (glsaved[4] + 1) * xdim / 320 - 1;
@@ -2671,6 +2707,7 @@ static void glview_end(void)
         return;
     for (i = 0; i < 9; i++)
         *v[i] = glsaved[i];
+    searchx = glsearchx; searchy = glsearchy;
 }
 
 /* Polymost takes the sorted list's index, classic the entry's fields. */

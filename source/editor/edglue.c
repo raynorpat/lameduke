@@ -20,11 +20,20 @@ static int shown;
 static void write_frame(const char *name)
 {
     FILE *fp = fopen(name, "wb");
+    int w, h;
+    unsigned char *capture = !ydim16 && getrendermode() >= 2 ? platform_capture(&w, &h) : NULL;
     const unsigned char *f = framebuffer();
     int pitch = ydim16 ? 640 : framebuffer_pitch(), x, y;
 
     if (!fp)
         return;
+    if (capture) {
+        fprintf(fp, "P6 %d %d 255\n", w, h);
+        fwrite(capture, 3, (size_t)w * h, fp);
+        free(capture);
+        fclose(fp);
+        return;
+    }
     fprintf(fp, "P6 %d %d 255\n", xdim, ydim);
     for (y = 0; y < ydim; y++)
         for (x = 0; x < xdim; x++) {
@@ -89,6 +98,13 @@ static void countframe(void)
 
 void editor_nextpage(void)
 {
+    const char *at = getenv("LAMEDUKE_FRAME_AT"), *name = getenv("LAMEDUKE_FRAME");
+    if (name && !ydim16 && getrendermode() >= 2
+        && shown + 1 >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
+        printf("title: %s\n", platform_title_text());
+        write_frame(name);
+        exit(0);
+    }
     nextpage();
     countframe();
     justshown = 1;
@@ -182,7 +198,8 @@ void drawline256(int32_t x1, int32_t y1, int32_t x2, int32_t y2, unsigned char c
 
 void clearview(int32_t col)
 {
-    memset((unsigned char *)framebuffer(), col, (size_t)(framebuffer_pitch() * ydim));
+    int height = getrendermode() == 2 && !ydim16 ? renderheight : ydim;
+    memset((unsigned char *)framebuffer(), col, (size_t)(framebuffer_pitch() * height));
 }
 
 /* With pageoffset 0 the offset counts eight-pixel groups into the status

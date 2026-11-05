@@ -18,6 +18,18 @@
 #include "sdl_sys.h"
 #include "sdl_window.h"
 #include "tiles.h"
+#include "videocfg.h"
+
+int editor_is_override(const char *arg);
+void editor_config_init(int argc, char **argv);
+void editor_set3d(void);
+void editor_cycle_renderer(void);
+void editor_renderer_message(int color);
+void editor_tile_begin(void);
+int editor_tile_draw(int x, int y, int tile, int size);
+#ifdef USE_OPENGL
+void setpolymost2dview(void);
+#endif
 
 #ifndef _WIN32
 #include <strings.h>

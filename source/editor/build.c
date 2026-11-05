@@ -808,6 +808,7 @@ short getnumber256(char namestart[80], short num, int32_t maxnumber)
 		drawrooms(posx,posy,posz,ang,horiz,cursectnum);
 		ExtAnalyzeSprites();
 		drawmasks();
+		glredrawlastframe();
 
 		sprintf(buffer,"%s%d_ ",namestart,danum);
 		printmessage256(buffer);
@@ -1555,6 +1556,9 @@ int drawtilescreen(int32_t pictopleft, int32_t picbox)
 
 	pinc = bytesperline;
 	clearview(0L);
+#ifdef POLYMOST
+	editor_tile_begin();
+#endif
 	for(cnt=0;cnt<(tottiles<<(gettilezoom<<1));cnt++)         /* draw the 5*3 grid of tiles */
 	{
 		wallnum = cnt+pictopleft;
@@ -1572,11 +1576,19 @@ int drawtilescreen(int32_t pictopleft, int32_t picbox)
 				day = ((cnt/(xtiles<<gettilezoom))<<(6-gettilezoom));
 				vidpos = day*bytesperline+dax+frameplace;
 #ifdef POLYMOST
-				if (polymost_drawtilescreen(dax,day,wallnum,64>>gettilezoom) != -1)
+				if (editor_tile_draw(dax,day,wallnum,64>>gettilezoom) != -1)
 					;  /* renderer 3 drew it: there is no frameplace to blit to */
 				else
 #endif
-				if ((xdime <= (64>>gettilezoom)) && (ydime <= (64>>gettilezoom)))
+				if (getrendermode() == 2)
+				{
+					scaledown = (max(xdime,ydime)+(63>>gettilezoom))>>(6-gettilezoom);
+					if (scaledown < 1) scaledown = 1;
+					for(i=0;i<xdime;i+=scaledown)
+						for(j=0;j<ydime;j+=scaledown)
+							plotpixel(dax+i/scaledown,day+j/scaledown,picptr[i*ydime+j]);
+				}
+				else if ((xdime <= (64>>gettilezoom)) && (ydime <= (64>>gettilezoom)))
 				{
 					for(i=0;i<xdime;i++)
 					{
@@ -4967,7 +4979,7 @@ void overheadeditor(void)
 
 	fixspritesectors();
 
-	setgamemode();
+	editor_set3d();
 
 	posz = oposz;
 	searchx = scale(searchx,xdim,640);
@@ -4993,6 +5005,12 @@ void editinput(void)
 	short hitsect, hitwall, hitsprite;
 	int32_t hitx, hity, hitz, dax, day, hihit, lohit;
 	int mousew, mouseh;
+
+	if ((keystatus[0x38] || keystatus[0xb8]) && keystatus[0x25])
+	{
+		keystatus[0x25] = 0;
+		editor_cycle_renderer();
+	}
 
 	if (keystatus[0x57] > 0)  /* F11 - brightness */
 	{
@@ -6710,6 +6728,7 @@ int main(int argc,char **argv)
 	strcpy(boardfilename,"newboard.map");
 	for(i=1,j=0;i<argc;i++)
 	{
+		if (editor_is_override(argv[i])) continue;
 		if (j++ == 0)
 		{
 			snprintf(boardfilename,sizeof(boardfilename)-4,"%s",argv[i]);
@@ -6719,6 +6738,7 @@ int main(int argc,char **argv)
 	}
 
 	ExtInit();
+	editor_config_init(argc, argv);
 	_initkeys();
 	inittimer();
 
@@ -6728,7 +6748,7 @@ int main(int argc,char **argv)
 	strcpy(kensig,"BUILD by Ken Silverman");
 	initcrc();
 
-	setgamemode();
+	editor_set3d();
 
 	k = 0;
 	for(i=0;i<256;i++)
@@ -6788,6 +6808,7 @@ int main(int argc,char **argv)
 		drawrooms(posx,posy,posz,ang,horiz,cursectnum);
 		ExtAnalyzeSprites();
 		drawmasks();
+		editor_renderer_message(whitecol);
 
 		ExtCheckKeys();
 
@@ -6798,6 +6819,7 @@ int main(int argc,char **argv)
 		if (keystatus[1] > 0)
 		{
 			keystatus[1] = 0;
+			glredrawlastframe();
 			printext256(0,0,whitecol,0,"Really want to quit?",0);
 			nextpage();
 			synctics = totalclock-lockclock;
@@ -6818,6 +6840,7 @@ int main(int argc,char **argv)
                     if (asksave)
                     {
                         asksave = 0;
+						glredrawlastframe();
             			printext256(0,0,whitecol,0,"Save changes?       ",0);
             			nextpage();
 

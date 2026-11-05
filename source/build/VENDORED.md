@@ -238,3 +238,8 @@ Text, `plotpixel` and the wall-loop helpers were written for `build.c`. The 1994
 game behavior are still being verified against the DOS executable; this is a
 work in progress, not a claim of complete equivalence to the later Build
 source release.
+
+- `draw.c`: map editor logical picking coordinates into the Polymost drawable
+  while drawing, and provide the GL tile-browser view and logical pixel mapping.
+- `editor/build.c`: restore configured 3D modes, cycle renderers, use the GL
+  tile view, and redraw the last frame beneath 3D quit prompts.
