@@ -2684,7 +2684,9 @@ static void glview_begin(void)
     xdim = rendmode == 3 ? xres : renderwidth;
     ydim = rendmode == 3 ? yres : renderheight;
     if (editstatus) {
-        searchx = searchx * xdim / glsaved[0];
+        int area = ydim * 4 / 3;
+        if (area > xdim) area = xdim;
+        searchx = (xdim - area) / 2 + searchx * area / glsaved[0];
         searchy = searchy * ydim / glsaved[1];
     }
     windowx1 = glsaved[2] * xdim / 320;

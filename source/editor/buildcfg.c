@@ -45,6 +45,7 @@ void editor_set3d(void)
 void editor_cycle_renderer(void)
 {
     videocfg_t active = videocfg_active;
+    int oldwidth = xdim, oldheight = ydim;
     int next = (active.renderer + 1) % 4;
     if (next == 3 && videocfg_gl_failed) next = 0;
     active.renderer = next;
@@ -53,6 +54,8 @@ void editor_cycle_renderer(void)
         videocfg.renderer = videocfg_active.renderer;
     setgamemode();
     setview(0, 0, xdim - 1, ydim - 1);
+    searchx = scale(searchx, xdim, oldwidth);
+    searchy = scale(searchy, ydim, oldheight);
     message_until = totalclock + 240;
 }
 
