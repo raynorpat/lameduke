@@ -162,10 +162,23 @@ void videocfg_apply(const videocfg_t *c)
         printf("%s; %s\n", c->renderer >= 3 ? "OpenGL renderer unavailable"
             : "Polymost renderer unavailable in this build",
             requested.renderer ? "keeping the current renderer." : "using the classic renderer.");
-    setvideotexfilter(requested.filter);
     setvideomiplevel(requested.miplevel);
     setvideocolor(requested.contrast, requested.saturation);
-    if (!same_gl_mode || requested.supersample != videocfg_active.supersample)
-        setvideosupersample(requested.supersample);
+    if (!same_gl_mode || requested.supersample != videocfg_active.supersample) {
+        int active = setvideosupersample(requested.supersample);
+        if (requested.supersample && !active) {
+            requested.supersample = 0;
+            videocfg_apply_failed = 1;
+            setvideosupersample(0);
+            printf("Supersampling unavailable; using the window resolution.\n");
+        }
+    }
+    /* Supersampling can also require a different filter present program. */
+    if (!setvideotexfilter(requested.filter)) {
+        requested.filter = 0;
+        videocfg_apply_failed = 1;
+        setvideotexfilter(0);
+        printf("Texture filtering unavailable; using Nearest.\n");
+    }
     videocfg_active = requested;
 }

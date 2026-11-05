@@ -317,6 +317,7 @@ static void videomenu(void)
             scoretext(178, y, value, shade);
     }
     if (videocfg_gl_failed) scoretext(8, 182, "OpenGL could not start", 16);
+    else if (videocfg_apply_failed) scoretext(8, 182, "Video setting unavailable", 16);
     if (keystatus[0x01] || keystatus[0x10] || click == 2) {
         keystatus[0x01] = keystatus[0x10] = 0; menupage = 30; return;
     }

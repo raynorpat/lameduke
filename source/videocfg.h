@@ -18,7 +18,7 @@ int videocfg_write(const char *path, const videocfg_t *c);
 void videocfg_apply(const videocfg_t *c);
 extern videocfg_t videocfg;        /* saved settings */
 extern videocfg_t videocfg_active; /* effective settings, including /p */
-/* Last apply's renderer/resolution failure; GL failure stays until a retry. */
+/* Last apply's video-setting failure; GL failure stays until a retry. */
 extern int videocfg_apply_failed, videocfg_gl_failed;
 
 #endif
