@@ -70,9 +70,10 @@ shows every local change. In summary:
 - Saving goes through `writeboard`, which writes sprites in index order. The
   start sector is no longer recomputed on save, and `fixspritesectors` only
   moves sprites changed since load.
-- The file menu lists through `plat_listdir`. Tile names come from
-  `DEFS.CON` through a new `ExtLoadNames` hook in `bstub.h`. Drawn walls get
-  `(-1,-1)` second links. The window title names the map.
+- The file menu lists through `plat_listdir`; long names are clipped to the
+  display row while their complete names remain available for loading. Tile
+  names come from `DEFS.CON` through a new `ExtLoadNames` hook in `bstub.h`.
+  Drawn walls get `(-1,-1)` second links. The window title names the map.
 
 The engine side of the editor was lifted from `D3D.EXE`, whose engine was
 shared with the 1994 BUILD:

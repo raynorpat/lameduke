@@ -941,7 +941,7 @@ int menuselect(void)
 				buffer[2] = '>';
 			}
 			j = 0;
-			while (menuname[i][j] != 0)
+			while ((menuname[i][j] != 0) && (j < 34))
 			{
 				buffer[j+4] = menuname[i][j];
 				j++;
