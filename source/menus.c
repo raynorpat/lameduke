@@ -331,10 +331,13 @@ static void videomenu(void)
     row = selected;
     enter = keystatus[0x1c] || keystatus[0x39] || click == 1;
     keystatus[0x1c] = keystatus[0x39] = 0;
+    if (video_slider_key && video_slider_row != row) {
+        video_slider_key = 0;
+        keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0;
+    }
     if (keystatus[0x4b] || keystatus[0xcb]) dir = -1;
     if (keystatus[0x4d] || keystatus[0xcd]) dir = 1;
     if (row == 9 && enter) { menupage = 30; return; }
-    if (video_slider_row != row) video_slider_key = 0;
     if (video_dim(row)) { video_slider_key = 0; keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0; return; }
     if (row == 6 || row == 7) {
         if (dir && !viewtic) { video_slider_key = dir; video_slider_row = row; }
