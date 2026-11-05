@@ -15,8 +15,7 @@ add_library(buildengine STATIC
   sdl_input.c
   sdl_window.c
   sdl_sys.c
-  sdl_audio.c
-  sdl_opengl.c)
+  sdl_audio.c)
 
 if(WIN32)
   target_sources(buildengine PRIVATE plat_win32.c)
