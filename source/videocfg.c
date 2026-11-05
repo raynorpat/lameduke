@@ -133,6 +133,7 @@ void videocfg_apply(const videocfg_t *c)
     videocfg_t requested = *c;
     int previous = getrendermode();
     int renderer = clamp(requested.renderer, 0, 3);
+    int resolution_failed = 0;
     int same_gl_mode = previous == 3 && renderer == 3
         && requested.width == renderwidth && requested.height == renderheight;
     videocfg_apply_failed = 0;
@@ -140,14 +141,16 @@ void videocfg_apply(const videocfg_t *c)
         setvideodisplaymode(requested.display);
     setvideovsync(requested.vsync);
     if (!same_gl_mode && setrenderresolution(requested.width, requested.height) != 0) {
-        videocfg_apply_failed = 1;
+        videocfg_apply_failed = resolution_failed = 1;
+        renderer = previous;
+        printf("Video resolution unavailable; keeping the current renderer.\n");
         requested.width = renderwidth;
         requested.height = renderheight;
     }
-    if (!rendereravailable(renderer)) {
+    if (!resolution_failed && !rendereravailable(renderer)) {
         videocfg_apply_failed = 1;
         renderer = 0;
-    } else if (renderer == 3 && !same_gl_mode) {
+    } else if (!resolution_failed && renderer == 3 && !same_gl_mode) {
         videocfg_gl_failed = setgamemode_gl(renderwidth, renderheight) != 0;
         if (videocfg_gl_failed) {
             videocfg_apply_failed = 1;
@@ -155,7 +158,7 @@ void videocfg_apply(const videocfg_t *c)
         }
     }
     requested.renderer = setrendermode(renderer);
-    if (requested.renderer != clamp(c->renderer, 0, 3))
+    if (!resolution_failed && requested.renderer != clamp(c->renderer, 0, 3))
         printf("%s; %s\n", c->renderer >= 3 ? "OpenGL renderer unavailable"
             : "Polymost renderer unavailable in this build",
             requested.renderer ? "keeping the current renderer." : "using the classic renderer.");
