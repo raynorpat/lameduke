@@ -138,6 +138,7 @@ static void present(void)
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *at = getenv("LAMEDUKE_FRAME_AT");
 
+    menus_applyvideo();
     if (sintable() && palookup[0]) {
         playertype *pl = &ps[screenpeek];
 
@@ -399,6 +400,8 @@ static int play_level(void)
         int steps, ran = 0;
         int fv, sv, av, bits;
 
+        input_scriptframe(frames + 1);
+        frames++;
         /* a frame dump runs one loop per frame, so frame N is always the same */
         if ((shot && shot[0]) || (int32_t)(now - next) >= 0) {
             /* after a stall the lost time is not made up */
@@ -455,7 +458,7 @@ static int play_level(void)
         viewtic = 1;
         smoothratio = 65536;
         if (speed && speed[0]) {
-            printf("frame %d %u\n", ++frames, (unsigned)timer_ticks());
+            printf("frame %d %u\n", frames, (unsigned)timer_ticks());
             fflush(stdout);
         }
         /* 0x17482: Quit to Main Menu, then 0x16036: Quit */

@@ -3,6 +3,7 @@
 
 /* 0x3CCF0: the menu page menupage names, drawn over the frame. */
 void menus(void);
+void menus_applyvideo(void);
 
 /* aItOnlyLooksPai and dword_82568, kept in userdefs.tmp. */
 extern char scorenames[12][33];

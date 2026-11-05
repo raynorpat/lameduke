@@ -12,6 +12,7 @@ int input_poll(void);
 int mouse_present(void);
 void getmousevalues(int *dx, int *dy, int *buttons);
 void input_clear(void);
+void input_scriptframe(int frame);
 
 /* Run `steps` of the 0x102A0 key ramp, then getinput 0x30E60: the mouse joins
    the ramp and the keys pack into the sync bits. */

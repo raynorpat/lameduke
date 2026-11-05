@@ -7,6 +7,8 @@
 
 #include "board.h"
 #include "draw.h"
+#include "display.h"
+#include "videocfg.h"
 #include "fx_man.h"
 #include "music.h"
 #include "sdl_input.h"
@@ -34,8 +36,8 @@ static const menutype restoremenu = { 100, 40, 9, 613,
 static const menutype savemenu = { 100, 40, 9, 1137,
     "empty\nempty\nempty\nempty\nempty\nempty\nempty\nempty\nBack" };
 static const menutype helpmenu = { 100, 40, 1, 615, "Back" };
-static const menutype optionsmenu = { 80, 40, 5, 1128,
-    "Sound Volume\nMusic Volume\nMouse Sensitivity\nJoystick\nBack" };
+static const menutype optionsmenu = { 80, 40, 6, 1128,
+    "Sound Volume\nMusic Volume\nMouse Sensitivity\nJoystick\nVideo Options\nBack" };
 static const menutype orderingmenu = { 100, 40, 1, 1127, "Back" };
 static const menutype scoremenu = { 100, 0, 0, 1138, "" };
 static const menutype ingamemenu = { 100, 40, 6, 1129,
@@ -171,30 +173,196 @@ static int runmenu(const menutype *m)
 
 /* One of the Game Options bars at y: the left and right keys or a held
    button move it with the pointer, 0-255 across 32 segments. */
-static void slider(int y, int *value)
+static void slider(int y, int *value, int video)
 {
     int shade = 16, i;
 
+    if (!video) {
+        if (cursory > y - 2 && cursory < y + 14) {
+            if (keystatus[0x4B] && viewtic) {
+                cursorx = (short)(cursorx - 8);
+                *value = cursorx >= 32 ? cursorx - 32 : 0;
+            }
+            if (keystatus[0x4D] && viewtic) {
+                cursorx = (short)(cursorx + 8);
+                *value = cursorx <= 288 ? cursorx - 32 : 255;
+            }
+            if (buttons) {
+                *value = cursorx > 288 ? 255 : cursorx >= 32 ? cursorx - 32 : 0;
+                shade = 0;
+            }
+        }
+        for (i = 0; i < 32; i++) {
+            if (i > *value >> 3)
+                rotatesprite(8 * i + 32, y + 4, 679, (signed char)shade, 0, 0);
+            else
+                rotatesprite(8 * i + 32, y, 678, (signed char)shade, 0, 0);
+        }
+        return;
+    }
     if (cursory > y - 2 && cursory < y + 14) {
-        if (keystatus[0x4B] && viewtic) {
-            cursorx = (short)(cursorx - 8);
-            *value = cursorx >= 32 ? cursorx - 32 : 0;
-        }
-        if (keystatus[0x4D] && viewtic) {
-            cursorx = (short)(cursorx + 8);
-            *value = cursorx <= 288 ? cursorx - 32 : 255;
-        }
-        if (buttons) {
-            *value = cursorx > 288 ? 255 : cursorx >= 32 ? cursorx - 32 : 0;
-            shade = 0;
+        if (keystatus[0x4B] && viewtic) cursorx = (short)(cursorx - 4);
+        if (keystatus[0x4D] && viewtic) cursorx = (short)(cursorx + 4);
+        if (((keystatus[0x4B] || keystatus[0x4D]) && viewtic) || buttons) {
+            int x = cursorx - 176;
+            *value = x < 0 ? 0 : x >= 128 ? 255 : x * 2;
         }
     }
-    for (i = 0; i < 32; i++) {
-        if (i > *value >> 3)
-            rotatesprite(8 * i + 32, y + 4, 679, (signed char)shade, 0, 0);
-        else
-            rotatesprite(8 * i + 32, y, 678, (signed char)shade, 0, 0);
+    for (i = 0; i < 32; i++)
+        rotatescalesprite((4 * i + 178) << 16, (y + 5) << 16, 32768, 0,
+            (short)(i > *value >> 3 ? 679 : 678));
+}
+
+static void scoretext(int x, int y, const char *s, int shade);
+
+/* Video settings apply at the next frame boundary, before the world is drawn. */
+static videocfg_t video_pending;
+static int video_pending_row = -1;
+static int video_w[256], video_h[256], video_count, video_mode;
+
+void menus_applyvideo(void)
+{
+    int row = video_pending_row;
+    if (row < 0) return;
+    video_pending_row = -1;
+    game_applyvideocfg(&video_pending);
+    if (videocfg_apply_failed) {
+        int i;
+        for (i = 0; i < video_count; i++)
+            if (video_w[i] == videocfg_active.width && video_h[i] == videocfg_active.height) video_mode = i;
+        return;
     }
+    switch (row) {
+    case 0: videocfg.renderer = video_pending.renderer; break;
+    case 1: videocfg.width = video_pending.width; videocfg.height = video_pending.height; break;
+    case 2: videocfg.display = video_pending.display; break;
+    case 3: videocfg.filter = video_pending.filter; break;
+    case 4: videocfg.miplevel = video_pending.miplevel; break;
+    case 5: videocfg.vsync = video_pending.vsync; break;
+    case 6: videocfg.contrast = video_pending.contrast; break;
+    case 7: videocfg.saturation = video_pending.saturation; break;
+    case 8: videocfg.supersample = video_pending.supersample; break;
+    }
+    videocfg_write("duke.cfg", &videocfg);
+}
+
+static void video_addmode(int w, int h)
+{
+    int i;
+    if (w < 320 || w > 7680 || h < 200 || h > 4320 || video_count >= 256) return;
+    for (i = 0; i < video_count; i++)
+        if (video_w[i] == w && video_h[i] == h) return;
+    video_w[video_count] = w; video_h[video_count++] = h;
+}
+
+static void video_init(void)
+{
+    int w[256], h[256], dw, dh, n, i;
+    n = getvideomodelist(w, h, 256, &dw, &dh);
+    video_count = 0;
+    for (i = 0; i < n; i++) video_addmode(w[i], h[i]);
+    video_addmode(dw, dh);
+    video_addmode(videocfg_active.width, videocfg_active.height);
+    video_mode = 0;
+    for (i = 0; i < video_count; i++)
+        if (video_w[i] == videocfg_active.width && video_h[i] == videocfg_active.height) video_mode = i;
+    cursorx = 160; cursory = 46;
+}
+
+static int video_dim(int row)
+{
+    if (row == 1) return videocfg_active.renderer < 2;
+    if (row == 3 || row == 4) return videocfg_active.renderer != 3;
+    if (row >= 6 && row <= 8) return videocfg_active.renderer != 3 || getvideoglpath() != 3;
+    return 0;
+}
+
+static void videomenu(void)
+{
+    static const char *labels[] = { "Renderer", "Resolution", "Display", "Texture Filtering", "Mip Level", "VSync", "Contrast", "Saturation", "Supersample", "Back" };
+    static const char *renderers[] = { "Classic", "Polymost Debug", "Polymost Software", "Polymost OpenGL" };
+    static const char *displays[] = { "Windowed", "Fullscreen", "Borderless" };
+    static const char *filters[] = { "Nearest", "Bilinear", "Trilinear" };
+    static const char *samples[] = { "Off", "2K", "4K", "8K" };
+    videocfg_t c = videocfg_active;
+    char value[64];
+    int row, i, dir = 0, enter, selected, v;
+    if (viewtic) {
+        if (titlespin >= 7844) titlespin = 0x2000;
+        else titlespin = (short)(titlespin + 348);
+    }
+    rotatescalesprite(160 << 16, (40 - tilesizy[1128] / 2 - 8) << 16, 8 * titlespin - 4096, titlespin, 1128);
+    selected = (cursory - 40) / 12;
+    if (selected < 0) selected = 0;
+    if (selected > 9) selected = 9;
+    for (i = 0; i < 10; i++) {
+        int y = 40 + 12 * i, shade = video_dim(i) ? 16 : 4;
+        value[0] = 0;
+        switch (i) {
+        case 0: snprintf(value, sizeof value, "%s", renderers[c.renderer]); break;
+        case 1: snprintf(value, sizeof value, "%dx%d", video_w[video_mode], video_h[video_mode]); break;
+        case 2: snprintf(value, sizeof value, "%s", displays[c.display]); break;
+        case 3: snprintf(value, sizeof value, "%s", filters[c.filter]); break;
+        case 4: snprintf(value, sizeof value, "%d", c.miplevel); break;
+        case 5: snprintf(value, sizeof value, "%s", c.vsync ? "On" : "Off"); break;
+        case 6: snprintf(value, sizeof value, "%d", (int)(100 * c.contrast)); break;
+        case 7: snprintf(value, sizeof value, "%d", (int)(100 * c.saturation)); break;
+        case 8: snprintf(value, sizeof value, "%s", samples[c.supersample]); break;
+        }
+        if (i == selected && shade != 16) shade = 0;
+        scoretext(8, y, labels[i], shade);
+        if (i != selected || (i != 6 && i != 7) || video_dim(i))
+            scoretext(178, y, value, shade);
+    }
+    if (videocfg_gl_failed) scoretext(8, 182, "OpenGL could not start", 16);
+    if (keystatus[0x01] || keystatus[0x10] || click == 2) {
+        keystatus[0x01] = keystatus[0x10] = 0; menupage = 30; return;
+    }
+    if (keystatus[0x48] || keystatus[0xC8] || keystatus[0x50] || keystatus[0xD0]) {
+        int d = (keystatus[0x48] || keystatus[0xC8]) ? -1 : 1;
+        keystatus[0x48] = keystatus[0xC8] = keystatus[0x50] = keystatus[0xD0] = 0;
+        selected = (selected + d + 10) % 10;
+        cursory = (short)(46 + 12 * selected);
+        if (selected == 6) cursorx = (short)(176 + (c.contrast - .5) * 127.5);
+        else if (selected == 7) cursorx = (short)(176 + c.saturation * 63.75);
+    }
+    row = selected;
+    enter = keystatus[0x1c] || keystatus[0x39] || click == 1;
+    keystatus[0x1c] = keystatus[0x39] = 0;
+    if (keystatus[0x4b] || keystatus[0xcb]) dir = -1;
+    if (keystatus[0x4d] || keystatus[0xcd]) dir = 1;
+    if (row == 9 && enter) { menupage = 30; return; }
+    if (video_dim(row)) { keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0; return; }
+    if (row == 6 || row == 7) {
+        v = row == 6 ? (int)((c.contrast - .5) * 255) : (int)(c.saturation * 127.5);
+        /* slider uses keypad arrows; normalize extended arrows for it. */
+        if (keystatus[0xcb]) keystatus[0x4b] = 1;
+        if (keystatus[0xcd]) keystatus[0x4d] = 1;
+        slider(40 + 12 * row, &v, 1);
+        if (dir || buttons) {
+            if (row == 6) c.contrast = .5 + v / 255.0;
+            else c.saturation = v / 127.5;
+            video_pending = c; video_pending_row = row;
+        }
+    } else if (row == 1) {
+        if (dir && video_count) video_mode = (video_mode + dir + video_count) % video_count;
+        if (enter && video_count) { c.width = video_w[video_mode]; c.height = video_h[video_mode]; video_pending = c; video_pending_row = row; }
+    } else if (dir || enter) {
+        if (!dir) dir = 1;
+        switch (row) {
+        case 0:
+            do { c.renderer = (c.renderer + dir + 4) % 4; }
+            while (c.renderer == 1 || !rendereravailable(c.renderer) || (c.renderer == 3 && videocfg_gl_failed));
+            break;
+        case 2: c.display = (c.display + dir + 3) % 3; break;
+        case 3: c.filter = (c.filter + dir + 3) % 3; break;
+        case 4: c.miplevel = (c.miplevel + dir + 16) % 16; break;
+        case 5: c.vsync = !c.vsync; break;
+        case 8: do { c.supersample = (c.supersample + dir + 4) % 4; } while (!videosupersampleavailable(c.supersample)); break;
+        }
+        video_pending = c; video_pending_row = row;
+    }
+    keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0;
 }
 
 /* The high score table (aItOnlyLooksPai, dword_82568), read and written with
@@ -288,6 +456,7 @@ void menus(void)
         cursorx = 160;
         menupage |= 0x80;
         cursory = 100;
+        if ((menupage & 0x7f) == 31) video_init();
         click = 0;
         titlespin = 0;
     }
@@ -363,14 +532,19 @@ void menus(void)
             menupage = 0;
         break;
     case 30:
-        slider(optionsmenu.y, &sound_volume);
+        slider(optionsmenu.y, &sound_volume, 0);
         FX_SetVolume(sound_volume);
-        slider(optionsmenu.y + 16, &music_volume);
+        slider(optionsmenu.y + 16, &music_volume, 0);
         MUSIC_SetVolume(music_volume);
-        slider(optionsmenu.y + 32, &mousesens);
+        slider(optionsmenu.y + 32, &mousesens, 0);
         r = runmenu(&optionsmenu);
-        if (r == -2 || r == -1 || r == 5)
+        if (r == -2 || r == -1 || r == 6)
             menupage = 0;
+        else if (r == 5)
+            menupage = 31;
+        break;
+    case 31:
+        videomenu();
         break;
     case 40:
         r = runmenu(&orderingmenu);

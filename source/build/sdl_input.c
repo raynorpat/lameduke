@@ -3,6 +3,7 @@
 
 #include <SDL.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int quit;
 static int mouse_x;
@@ -224,6 +225,8 @@ static void scriptkeys(void)
 
     if (!k && !(k = getenv("LAMEDUKE_KEYS")))
         return;
+    if (strchr(k, ':'))
+        return;
     keystatus[held] = 0;
     held = 0;
     if (*k) {
@@ -254,4 +257,24 @@ void input_sample(int steps, int *fvel, int *svel, int *avel, int *bits)
     *svel = ramp_s;
     *avel = ramp_t;
     *bits = syncbits_from_keys();
+}
+
+/* Timed scripts are game-only: the editor has its own idle-step parser. */
+void input_scriptframe(int frame)
+{
+    const char *p = getenv("LAMEDUKE_KEYS");
+    static int held;
+    if (!p || !strchr(p, ':')) return;
+    if (held) keystatus[held] = 0;
+    held = 0;
+    while (p && *p) {
+        const char *c = strchr(p, ':');
+        if (!c) break;
+        if (atoi(p) == frame) {
+            held = (int)strtol(c + 1, NULL, 16) & 255;
+            if (held) keystatus[held] = 1;
+        }
+        p = strchr(c, ',');
+        if (p) p++;
+    }
 }
