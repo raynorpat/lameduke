@@ -24,6 +24,7 @@ extern const unsigned char kickframes[6][20];
 short msgtime;
 const char *msgtext = "";
 static short hudpulse;
+int viewtic = 1;
 
 #define GOTPIC(p) (gotpic[(p) >> 3] & (1 << ((p) & 7)))
 
@@ -237,7 +238,8 @@ static void animatesprites(int viewang)
         switch (s->picnum) {
         case 1165:
             tspritepicnum[k] = (short)((t[0] & 1) + 1165);
-            t[0] = (t[0] + 1) & 3;
+            if (viewtic)
+                t[0] = (t[0] + 1) & 3;
             s->cstat |= 0xC;
             if (t[0] > 1)
                 s->cstat &= 0xFB;
@@ -852,13 +854,13 @@ static void displayquotes(short p)
     int y;
 
     if (msgtime > 0) {
-        msgtime--;
+        msgtime -= viewtic;
         minitext(8, 162, msgtext, 0);
     }
     if (pl->w7a < 0 || pl->w7a >= 13)
         return;
     if ((&pl->w60)[pl->w7a] > 0) {
-        (&pl->w60)[pl->w7a]--;
+        (&pl->w60)[pl->w7a] -= viewtic;
         y = pl->w4a >= 0 ? 166 : 189;
         minitext(24, y, fta_quotes[pl->w7a], 0);
     }
@@ -867,7 +869,7 @@ static void displayquotes(short p)
 /* 0x123D0. Shade from the sine table; the index is the counter's low 11 bits. */
 int hudshade(void)
 {
-    hudpulse = (short)(hudpulse + 0x80);
+    hudpulse = (short)(hudpulse + 0x80 * viewtic);
     return (sintable()[hudpulse & 0x07FF] >> 10) + 16;
 }
 
@@ -993,8 +995,10 @@ void drawview(short p)
     /* 0x160BD: a resize or map key repaints the border with tile 1170 */
     if (syncbits[p] & (0x80000 | 0x100000 | 0x400000))
         rotatesprite(0, 0, 1170, 0, 0, 0);
-    animatewalls();
-    updateviewscreen(p);
+    if (viewtic) {
+        animatewalls();
+        updateviewscreen(p);
+    }
     if (cameraspr >= 0) {
         spritetype *c = &sprite[cameraspr];
 

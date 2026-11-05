@@ -5,6 +5,10 @@
    wall frame animation. */
 void displayrooms(short p);
 void drawview(short p);
+/* 1 when a game loop ran since the last frame. A frame drawn between loops
+   leaves the frame counters (animated walls, the viewscreen, the quote
+   timers, the HUD pulse) alone. */
+extern int viewtic;
 
 /* 0x12850. The small font: tile is the character plus 991, a space is 2 px,
    a newline drops 8 and returns to the left, lowercase sits 2 px lower.

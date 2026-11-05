@@ -37,6 +37,7 @@ static struct {
 } soundinfo[NUMSOUNDS];
 
 unsigned char soundon = 1; /* byte_1257AB, from userdefs.tmp (1 without one) */
+int taskman;
 
 /* The parsers read a few bytes past a block or track end, as the exe does;
    this much zeroed slack after each file keeps those reads in the buffer. */
@@ -232,6 +233,7 @@ void playmusic(const char *fn)
     }
     fclose(fp);
     MUSIC_PlaySong(next, 1);
+    taskman = 1;
     free(song);
     song = next;
 }

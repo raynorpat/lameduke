@@ -316,60 +316,90 @@ static int play_demo(const demo_t *demo)
     return PLAY_DONE;
 }
 
+/* totalclock's ticks in t/per seconds. main (0x15BE7) runs sub_102A0 at
+   120 Hz, and it steps by 6 with music on. Once a song starts, TaskMan
+   (0x65CCC) takes the timer and chains sub_102A0 at only 1193182/65536 Hz. */
+static int clock_tics(int t, int per, int *rem)
+{
+    int den = taskman ? 65536 * per : per;
+    int n;
+
+    /* a second at most, so the product stays in range after a stall */
+    if (t > per)
+        t = per;
+    *rem += t * (taskman ? 1193182 : 120);
+    n = *rem / den;
+    *rem %= den;
+    return setup_byte(2) != 0 ? n * 6 : n;
+}
+
+/* The single-player loop 0x16F4A runs domovethings once per frame drawn, and
+   much of it (actors, scripts, weapons) moves per call, not per tic. The game
+   was paced on a 486 DX2-66 drawing 15 frames a second (docs/game-speed.md),
+   so the logic runs at that rate and frames are drawn as fast as they come.
+   Below 15 frames a second the game slows down, as it did on the 486. */
+#define GAME_LOGIC_HZ 15
+
 static int play_level(void)
 {
-    uint32_t prev;
-    int clock_remainder = 0;
+    uint32_t next;
+    int pace = 0, clock_remainder = 0;
+    const char *shot = getenv("LAMEDUKE_FRAME");
+    const char *speed = getenv("LAMEDUKE_SPEED");
+    int logic = 0, frames = 0;
 
-    prev = timer_ticks();
+    next = timer_ticks();
     present();
     while (!input_poll()) {
         uint32_t now = timer_ticks();
-        int elapsed = (int)(now - prev);
-        int irqs;
-        int steps;
-        int per_irq;
+        int steps, ran = 0;
         int fv, sv, av, bits;
 
-        /* Music byte selects the 6-step ISR. The PIT itself stays at 120 Hz. */
-        per_irq = setup_byte(2) != 0 ? 6 : 1;
-        if (elapsed < 0)
-            elapsed = 0;
-        prev = now;
-        clock_remainder += elapsed * 120;
-        irqs = clock_remainder / 1000;
-        if (irqs < 1) {
-            timer_delay(1);
-            continue;
+        /* a frame dump runs one loop per frame, so frame N is always the same */
+        if ((shot && shot[0]) || (int32_t)(now - next) >= 0) {
+            /* after a stall the lost time is not made up */
+            if ((int32_t)(now - next) > 1000)
+                next = now;
+            pace += 1000;
+            next += (uint32_t)(pace / GAME_LOGIC_HZ);
+            pace %= GAME_LOGIC_HZ;
+            ran = 1;
+            /* getinput 0x30E60: the ticks since the last loop */
+            steps = clock_tics(1, GAME_LOGIC_HZ, &clock_remainder);
+            functionkeys();
+            /* getinput 0x30E60 gives nothing while the menu is open. */
+            if (ps[myconnectindex].gm & 1) {
+                input_clear();
+                fv = sv = av = bits = 0;
+            } else {
+                input_sample(steps, &fv, &sv, &av, &bits);
+            }
+            syncfvel[0] = (signed char)fv;
+            syncsvel[0] = (signed char)sv;
+            syncavel[0] = (signed char)av;
+            syncbits[0] = bits;
+            synctics = (unsigned char)steps;
+            totalclock += steps;
+            domovethings();
+            if (speed && speed[0]) {
+                printf("logic %d %u\n", ++logic, (unsigned)timer_ticks());
+                fflush(stdout);
+            }
+            /* 0x17411: an exit sets bit 3, and the next level starts. */
+            if (ps[screenpeek].gm & 8) {
+                ps[screenpeek].level++;
+                enterlevel(4);
+                next = timer_ticks();
+                continue;
+            }
         }
-        if (irqs > 40)
-            irqs = 40;
-        clock_remainder -= irqs * 1000;
-        steps = irqs * per_irq;
-        if (steps > 255)
-            steps = 255;
-        functionkeys();
-        /* getinput 0x30E60 gives nothing while the menu is open. */
-        if (ps[myconnectindex].gm & 1) {
-            input_clear();
-            fv = sv = av = bits = 0;
-        } else {
-            input_sample(steps, &fv, &sv, &av, &bits);
-        }
-        syncfvel[0] = (signed char)fv;
-        syncsvel[0] = (signed char)sv;
-        syncavel[0] = (signed char)av;
-        syncbits[0] = bits;
-        synctics = (unsigned char)steps;
-        totalclock += steps;
-        domovethings();
-        /* 0x17411: an exit sets bit 3, and the next level starts. */
-        if (ps[screenpeek].gm & 8) {
-            ps[screenpeek].level++;
-            enterlevel(4);
-            continue;
-        }
+        viewtic = ran;
         present();
+        viewtic = 1;
+        if (speed && speed[0]) {
+            printf("frame %d %u\n", ++frames, (unsigned)timer_ticks());
+            fflush(stdout);
+        }
         /* 0x17482: Quit to Main Menu, then 0x16036: Quit */
         if (ps[screenpeek].gm & 2)
             return PLAY_ATTRACT;
@@ -431,10 +461,8 @@ void levelscreen(int mode)
         if (input_poll())
             return;
         now = timer_ticks();
-        rem += (int)(now - prev) * 120 * (setup_byte(2) != 0 ? 6 : 1);
+        totalclock += clock_tics((int)(now - prev), 1000, &rem);
         prev = now;
-        totalclock += rem / 1000;
-        rem %= 1000;
         rotatesprite(0, 0, pl->volume < 2 ? 1132 : 1135, 0, 0, 0);
         bigtext(36, 160, "Press SPACE to continue", shade);
         /* word_82304 has only episode 1's points; the rest are zeros and other data */
