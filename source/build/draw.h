@@ -39,10 +39,12 @@ void showpage(void);
 
 /* The renderer: 0 classic, 1 Polymost solid colour, 2 Polymost software,
    3 Polymost OpenGL. setrendermode clamps to what this build has (0 without
-   Polymost) and returns the one in use. */
+   OpenGL or Polymost) and returns the one in use. */
 extern int rendmode;
 int setrendermode(int renderer);
 int getrendermode(void);
+/* Compiled capability, independent of whether a GL context has been made. */
+int rendereravailable(int renderer);
 /* Size of renderers 2/3; game coordinates remain 320x200. */
 extern int renderwidth, renderheight;
 int setrenderresolution(int width, int height);

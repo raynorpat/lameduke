@@ -1,5 +1,6 @@
 #ifndef PREMAP_H
 #define PREMAP_H
+#include "videocfg.h"
 
 /* 0x249B0 loads L1.MAP style boards ("Entering...", "Board not found.").
    0x24E00 checks FILE_ID.DIZ. 0x15570 handles L?.MAP and the command line. */
@@ -23,5 +24,7 @@ extern int game_renderer_arg;
 /* Switches to a renderer (making renderer 3's window when it has to), or
    says why it can't and keeps the one in use. */
 void game_setrenderer(int renderer);
+/* Apply an active copy, then normalize the game's logical view. Does not save. */
+void game_applyvideocfg(const videocfg_t *c);
 
 #endif

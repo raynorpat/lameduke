@@ -128,27 +128,25 @@ void check_args(int argc, char **argv)
             exit(0);
         }
     }
-    if (game_renderer_arg >= 0)
-        game_setrenderer(game_renderer_arg);
 }
 
 void game_setrenderer(int renderer)
 {
-    int prev = getrendermode();
-
-    /* Inert test hook until Video Options supplies the resolution. */
+    videocfg_t active = videocfg_active;
     const char *size = getenv("LAMEDUKE_RESOLUTION");
     int w, h;
-    if (size && sscanf(size, "%dx%d", &w, &h) == 2)
-        setrenderresolution(w, h);
-    if (renderer >= 3)
-        setgamemode_gl(renderwidth, renderheight);
-    if (setrendermode(renderer) != (renderer > 3 ? 3 : renderer)) {
-        printf("%s; %s\n", renderer >= 3 ? "OpenGL renderer unavailable"
-                                               : "Polymost renderer unavailable in this build",
-               prev ? "keeping the current renderer." : "using the classic renderer.");
-        setrendermode(prev);
+    active.renderer = renderer;
+    if (size && sscanf(size, "%dx%d", &w, &h) == 2) {
+        active.width = w;
+        active.height = h;
     }
+    game_applyvideocfg(&active);
+}
+
+void game_applyvideocfg(const videocfg_t *c)
+{
+    int prev = getrendermode();
+    videocfg_apply(c);
     if ((prev >= 2) != game_hires()) {
         /* The game view is 320x200 in hires, even when Classic uses mode 7. */
         setgamemode();

@@ -1,3 +1,7 @@
+add_library(videocfg STATIC videocfg.c)
+target_include_directories(videocfg PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(videocfg PUBLIC buildengine)
+
 add_executable(d3d
   actors.c
   demo.c
@@ -16,6 +20,7 @@ target_include_directories(d3d PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(d3d PRIVATE
   lameduke_compile_options
   buildengine
+  videocfg
   audiolib
   ${LAMEDUKE_SDL2MAIN_TARGET})
 

@@ -2400,6 +2400,15 @@ static void drawsprite(int sxpos, int depth, short tilenum, short spritenum, int
 /* Renderer in use; see draw.h. */
 int rendmode;
 
+int rendereravailable(int renderer)
+{
+#if defined(POLYMOST) && defined(USE_OPENGL)
+    return renderer >= 0 && renderer <= 3;
+#else
+    return renderer == 0;
+#endif
+}
+
 int setrendermode(int renderer)
 {
 #ifdef POLYMOST
@@ -2407,6 +2416,8 @@ int setrendermode(int renderer)
         renderer = 0;
     if (renderer > 3)
         renderer = 3;
+    if (!rendereravailable(renderer))
+        renderer = 0;
 #ifdef USE_OPENGL
     /* Renderer 3 draws in setgamemode_gl's window. */
     if (renderer == 3 && !getvideoglpath())

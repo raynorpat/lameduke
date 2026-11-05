@@ -34,6 +34,12 @@ static const char banner[] =
    Index 0 is "no digitized sound" and main does not call FX with it. */
 static const int setup_fx_card[9] = { -1, 0, 1, 3, 4, 7, 9, 10, 12 };
 
+static void save_video_settings(void)
+{
+    if (videocfg_write("duke.cfg", &videocfg) != 0)
+        puts("Could not write duke.cfg.");
+}
+
 static int fx_card_from_setup(void)
 {
     int menu = setup_byte(1);
@@ -602,6 +608,9 @@ int main(int argc, char **argv)
         return 1;
     }
     check_args(argc, argv);
+    videocfg_read("duke.cfg", &videocfg);
+    videocfg_active = videocfg;
+    atexit(save_video_settings);
     if (compilecon() != 0) {
         errorexit("game.con");
     }
@@ -638,6 +647,7 @@ int main(int argc, char **argv)
         MUSIC_SetVolume(music_volume);
     }
 
+    game_setrenderer(game_renderer_arg >= 0 ? game_renderer_arg : videocfg.renderer);
     setgamemode();
     printf("video %dx%d\n", xdim, ydim);
 

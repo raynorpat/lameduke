@@ -3,6 +3,8 @@ DOS4GW.EXE
 SETUP.EXE
 /build/
 /build-debug/
+/duke.cfg
+/build.cfg
 CMakeUserPresets.json
 *.i64
 *.idb
