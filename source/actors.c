@@ -16,6 +16,7 @@
 #include "tiles.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 int hittype[MAXSPRITES][5];
 int msx[1024], msy[1024];                          /* 0x122830, 0x123830 */
@@ -67,6 +68,9 @@ short EGS(short whatsect, int x, int y, int z, int cstat, short picnum, int shad
     hittype[i][0] = 0;
     s->z = z;
     s->x = x;
+    bposx[i] = x;
+    bposy[i] = y;
+    bposz[i] = z;
     actorinit(i, picnum);
     return i;
 }
@@ -3035,4 +3039,108 @@ void domovethings(void)
         movemusic();
     }
     synctics = 0;
+}
+
+/* duke3d's interpolations, for frames drawn between two logic steps: every
+   wall, sector, sprite and view is drawn part of the way from where the
+   last step found it, and put back before the next step. */
+static walltype owall[MAXWALLS], bwall[MAXWALLS];
+static sectortype osector[MAXSECTORS], bsector[MAXSECTORS];
+static spritetype bsprite[MAXSPRITES];
+static playertype ops[MAXPLAYERS], bps[MAXPLAYERS];
+
+/* From o toward n; 65536 is n exactly. */
+static int blend(int o, int n, int r)
+{
+    return n - (int)((long long)(n - o) * (65536 - r) >> 16);
+}
+
+/* A jump this far in one step (a teleport, a monitor) is not drawn in between. */
+static int jumped(int dx, int dy)
+{
+    return abs(dx) + abs(dy) >= 8192;
+}
+
+void updateinterpolations(void)
+{
+    int i;
+
+    memcpy(owall, wall, sizeof owall);
+    memcpy(osector, sector, sizeof osector);
+    memcpy(ops, ps, sizeof ops);
+    for (i = 0; i < MAXSPRITES; i++) {
+        bposx[i] = sprite[i].x;
+        bposy[i] = sprite[i].y;
+        bposz[i] = sprite[i].z;
+    }
+}
+
+void dointerpolations(int r)
+{
+    int i;
+    short p;
+
+    memcpy(bwall, wall, sizeof bwall);
+    memcpy(bsector, sector, sizeof bsector);
+    memcpy(bsprite, sprite, sizeof bsprite);
+    memcpy(bps, ps, sizeof bps);
+    for (i = 0; i < numwalls; i++) {
+        wall[i].x = blend(owall[i].x, wall[i].x, r);
+        wall[i].y = blend(owall[i].y, wall[i].y, r);
+    }
+    for (i = 0; i < numsectors; i++) {
+        sector[i].ceilingz = blend(osector[i].ceilingz, sector[i].ceilingz, r);
+        sector[i].floorz = blend(osector[i].floorz, sector[i].floorz, r);
+    }
+    for (i = 0; i < MAXSPRITES; i++) {
+        spritetype *s = &sprite[i];
+
+        if (jumped(s->x - bposx[i], s->y - bposy[i]))
+            continue;
+        s->x = blend(bposx[i], s->x, r);
+        s->y = blend(bposy[i], s->y, r);
+        s->z = blend(bposz[i], s->z, r);
+    }
+    for (p = connecthead; p >= 0; p = connectpoint2[p]) {
+        playertype *pl = &ps[p], *o = &ops[p];
+
+        if (jumped(pl->posx - o->posx, pl->posy - o->posy))
+            continue;
+        pl->posx = blend(o->posx, pl->posx, r);
+        pl->posy = blend(o->posy, pl->posy, r);
+        pl->posz = blend(o->posz, pl->posz, r);
+        pl->horiz = blend(o->horiz, pl->horiz, r);
+        /* the short way round */
+        pl->ang = (short)blend(pl->ang - ((((pl->ang - o->ang) & 2047) ^ 1024) - 1024), pl->ang, r);
+        pl->lookang = (short)blend(o->lookang, pl->lookang, r);
+    }
+}
+
+/* Only the blended fields: drawing's own writes (animatesprites' cstat) stay. */
+void restoreinterpolations(void)
+{
+    int i;
+    short p;
+
+    for (i = 0; i < numwalls; i++) {
+        wall[i].x = bwall[i].x;
+        wall[i].y = bwall[i].y;
+    }
+    for (i = 0; i < numsectors; i++) {
+        sector[i].ceilingz = bsector[i].ceilingz;
+        sector[i].floorz = bsector[i].floorz;
+    }
+    for (i = 0; i < MAXSPRITES; i++) {
+        sprite[i].x = bsprite[i].x;
+        sprite[i].y = bsprite[i].y;
+        sprite[i].z = bsprite[i].z;
+    }
+    for (p = connecthead; p >= 0; p = connectpoint2[p]) {
+        ps[p].posx = bps[p].posx;
+        ps[p].posy = bps[p].posy;
+        ps[p].posz = bps[p].posz;
+        ps[p].horiz = bps[p].horiz;
+        ps[p].ang = bps[p].ang;
+        ps[p].lookang = bps[p].lookang;
+    }
 }

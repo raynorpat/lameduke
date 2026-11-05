@@ -40,6 +40,9 @@ void movestandables(void);
 void moveactors(void);
 void moveeffectors(void);
 void domovethings(void);
+void updateinterpolations(void);
+void dointerpolations(int smoothratio);
+void restoreinterpolations(void);
 extern short viewscreen;
 
 extern short randomstash; /* word_1253A0: a krand drawn at the start of every tic */

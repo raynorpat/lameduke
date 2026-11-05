@@ -15,6 +15,7 @@
 #include "premap.h"
 #include "sdl_input.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 /* byte_82364. The knee's frame list, shared with the trigger in player.c. */
@@ -999,6 +1000,7 @@ void drawview(short p)
         animatewalls();
         updateviewscreen(p);
     }
+    dointerpolations(smoothratio);
     if (cameraspr >= 0) {
         spritetype *c = &sprite[cameraspr];
 
@@ -1011,9 +1013,12 @@ void drawview(short p)
     } else {
         drawrooms(pl->posx, pl->posy, pl->posz, (short)(pl->ang + pl->lookang), pl->horiz, pl->cursectnum);
         animatesprites(pl->ang + pl->lookang);
+        if (getenv("LAMEDUKE_SPEED"))
+            printf("cam %d %d %d\n", pl->posx, pl->posy, (pl->ang + pl->lookang) & 2047);
     }
     drawmasks();
     reflectfloor();
+    restoreinterpolations();
 }
 
 void displayrooms(short p)

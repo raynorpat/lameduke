@@ -267,11 +267,12 @@ static int demo_outcome(void)
 
 static int play_demo(const demo_t *demo)
 {
-    int i;
+    int i, first;
     int clock = 0, target = 0, remainder = 0;
     uint32_t prev = timer_ticks();
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *trace = getenv("LAMEDUKE_TRACE");
+    const char *nosmooth = getenv("LAMEDUKE_NOSMOOTH");
 
     for (i = 0; i < demo->count; i++) {
         int tics = demo->tics[i];
@@ -286,6 +287,9 @@ static int play_demo(const demo_t *demo)
         synctics = (unsigned char)tics;
         /* the interrupt's count; the recording kept pace with it */
         totalclock += tics;
+        /* blend from the last frame drawn, past any zero-tic samples since */
+        if (i == 0 || demo->tics[i - 1])
+            updateinterpolations();
         domovethings();
         if (trace && trace[0])
             printf("sample %d %d %d %d %d %d\n", i, ps[0].posx, ps[0].posy, ps[0].posz, ps[0].ang,
@@ -302,16 +306,23 @@ static int play_demo(const demo_t *demo)
             menupage = 0;
             ps[screenpeek].gm |= 1;
         }
-        present();
-        if (demo_outcome() != PLAY_DONE)
-            return demo_outcome();
-        if (shot && shot[0])
-            continue;
-        /* 0x15E53: samples run while totalclock is ahead of the demo's clock */
+        /* 0x15E53: samples run while totalclock is ahead of the demo's clock.
+           The frames drawn while waiting fall between this sample and the next. */
         target += tics;
-        while (clock < target) {
+        for (first = 1;; first = 0) {
             uint32_t now;
 
+            smoothratio = 65536;
+            if (!(shot && shot[0]) && !(nosmooth && nosmooth[0]) && !(ps[myconnectindex].gm & 1))
+                smoothratio = clock >= target ? 65536 : 65536 - (target - clock) * 65536 / tics;
+            viewtic = first;
+            present();
+            viewtic = 1;
+            smoothratio = 65536;
+            if (demo_outcome() != PLAY_DONE)
+                return demo_outcome();
+            if ((shot && shot[0]) || clock >= target)
+                break;
             if (input_poll())
                 return PLAY_CLOSED;
             timer_delay(1);
@@ -336,6 +347,8 @@ static int play_level(void)
     int pace = 0, clock_remainder = 0;
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *speed = getenv("LAMEDUKE_SPEED");
+    const char *trace = getenv("LAMEDUKE_TRACE");
+    const char *nosmooth = getenv("LAMEDUKE_NOSMOOTH");
     int logic = 0, frames = 0;
 
     next = timer_ticks();
@@ -370,11 +383,17 @@ static int play_level(void)
             syncbits[0] = bits;
             synctics = (unsigned char)steps;
             totalclock += steps;
+            updateinterpolations();
             domovethings();
+            if (trace && trace[0])
+                printf("sample %d %d %d %d %d %d\n", logic, ps[0].posx, ps[0].posy, ps[0].posz, ps[0].ang,
+                    ps[0].cursectnum);
             if (speed && speed[0]) {
-                printf("logic %d %u\n", ++logic, (unsigned)timer_ticks());
+                printf("logic %d %u %d %d\n", logic + 1, (unsigned)timer_ticks(), ps[screenpeek].posx,
+                    ps[screenpeek].posy);
                 fflush(stdout);
             }
+            logic++;
             /* 0x17411: an exit sets bit 3, and the next level starts. */
             if (ps[screenpeek].gm & 8) {
                 ps[screenpeek].level++;
@@ -383,9 +402,17 @@ static int play_level(void)
                 continue;
             }
         }
+        /* duke3d's smoothratio: the share of this step gone by when the frame is drawn */
+        smoothratio = 65536;
+        if (!(shot && shot[0]) && !(nosmooth && nosmooth[0]) && !gamepaused && !(ps[myconnectindex].gm & 1)) {
+            int left = (int)(next - timer_ticks()) * 65536 / 1000 * GAME_LOGIC_HZ;
+
+            smoothratio = left < 0 ? 65536 : left > 65536 ? 0 : 65536 - left;
+        }
         viewtic = ran;
         present();
         viewtic = 1;
+        smoothratio = 65536;
         if (speed && speed[0]) {
             printf("frame %d %u\n", ++frames, (unsigned)timer_ticks());
             fflush(stdout);

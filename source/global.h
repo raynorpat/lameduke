@@ -54,6 +54,11 @@ extern int lockclock;                /* 0x125304 */
 extern short gamepaused, cameraspr;  /* 0x1257B3, 0x1257B5 */
 extern short myconnectindex;         /* word_12538C */
 extern int demomode;                 /* dword_125258 */
+
+/* Drawing between logic steps (docs/game-speed.md): the share of the step
+   gone by, 0..65536, and each sprite's place before the step. */
+extern int smoothratio;
+extern int bposx[MAXSPRITES], bposy[MAXSPRITES], bposz[MAXSPRITES];
 #define debugmode game_debug         /* word_1257AD, set by /d */
 extern int game_debug;
 

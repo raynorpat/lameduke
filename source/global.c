@@ -11,3 +11,5 @@ short screenpeek, myconnectindex;
 int lockclock;
 short gamepaused, cameraspr = -1;
 int demomode; /* dword_125258: 1 recording, 2 playing back */
+int smoothratio = 65536;
+int bposx[MAXSPRITES], bposy[MAXSPRITES], bposz[MAXSPRITES];

@@ -2,6 +2,7 @@
 #include "engine.h"
 
 #include <SDL.h>
+#include <stdlib.h>
 
 static int quit;
 static int mouse_x;
@@ -215,11 +216,32 @@ void input_clear(void)
     ramp_f = ramp_s = ramp_t = 0;
 }
 
+/* A test aid: LAMEDUKE_KEYS is comma-separated hex scancodes, one held for each call. */
+static void scriptkeys(void)
+{
+    static const char *k;
+    static int held;
+
+    if (!k && !(k = getenv("LAMEDUKE_KEYS")))
+        return;
+    keystatus[held] = 0;
+    held = 0;
+    if (*k) {
+        char *end;
+
+        held = (int)strtol(k, &end, 16) & 0xFF;
+        k = *end == ',' ? end + 1 : end;
+        if (held)
+            keystatus[held] = 1;
+    }
+}
+
 void input_sample(int steps, int *fvel, int *svel, int *avel, int *bits)
 {
     const int sens = mousesens + 129;
     int i;
 
+    scriptkeys();
     for (i = 0; i < steps; i++)
         ramp_step();
     if (mouse_present()) {
