@@ -336,5 +336,7 @@ int enterlevel(int mode)
     totalclock = lockclock = 0;
     synctics = 0;
     ps[screenpeek].gm = (unsigned char)mode;
+    /* the frames before the next step blend from the new board */
+    updateinterpolations();
     return 0;
 }

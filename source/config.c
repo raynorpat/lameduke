@@ -242,4 +242,6 @@ void loadplayer(int slot)
     ps[0].cursectnum = cursectnum;
     updatesector(ps[0].posx, ps[0].posy, &ps[0].cursectnum);
     ps[screenpeek].gm = 4;
+    /* the frames before the next step blend from the loaded board */
+    updateinterpolations();
 }
