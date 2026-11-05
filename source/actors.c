@@ -12,7 +12,7 @@
 #include "view.h"
 
 #include "board.h"
-#include "math.h"
+#include "buildmath.h"
 #include "tiles.h"
 
 #include <stdlib.h>

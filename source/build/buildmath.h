@@ -1,5 +1,5 @@
-#ifndef MATH_H
-#define MATH_H
+#ifndef BUILDMATH_H
+#define BUILDMATH_H
 
 /* tables.dat is 11904 bytes, read in six slices by 0x49518:
    4096, 4096, 640, 1024, 1024, 1024. */

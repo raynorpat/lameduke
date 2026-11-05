@@ -1,7 +1,7 @@
 #include "engine.h"
 #include "display.h"
 #include "draw.h"
-#include "math.h"
+#include "buildmath.h"
 
 #include "platform.h"
 #include "sdl_main.h"

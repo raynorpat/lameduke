@@ -9,7 +9,7 @@
 
 #include "cache1d.h"
 #include "engine.h"
-#include "math.h"
+#include "buildmath.h"
 #include "display.h"
 #include "board.h"
 #include "draw.h"

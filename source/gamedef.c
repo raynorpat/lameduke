@@ -2,7 +2,7 @@
 #include "global.h"
 #include "actors.h"
 #include "sounds.h"
-#include "math.h"
+#include "buildmath.h"
 
 #include "platform.h"
 

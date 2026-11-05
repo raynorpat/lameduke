@@ -9,7 +9,7 @@
 
 #include "board.h"
 #include "draw.h"
-#include "math.h"
+#include "buildmath.h"
 #include "tiles.h"
 #include "sounds.h"
 #include "premap.h"

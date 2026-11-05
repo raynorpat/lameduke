@@ -38,7 +38,7 @@ a comparison point, not an asserted ancestor of the code here.
 | `draw.c`, `draw.h` | The classic software room and mask drawers and `rotatesprite`, reconstructed from the executable. They replace the earlier portal approximation. |
 | `display.c`, `display.h` | Palette and lookup loading, display mode and view setup. |
 | `tiles.c`, `tiles.h` | Loose `TILES000.ART`–`TILES007.ART` tile loading and access. |
-| `math.c`, `math.h` | Sine-table loading and engine math helpers. |
+| `math.c`, `buildmath.h` | Sine-table loading and engine math helpers. |
 | `cache.c`, `cache1d.h` | Cache interface used by this rebuild. |
 | `engine.c`, `engine.h` | Engine initialization and reading the original `SETUP.DAT` bytes. |
 | `network.c`, `network.h` | Single-player connection state; multiplayer is a stub and opens no connection. |
@@ -100,8 +100,10 @@ without `USE_OPENGL`, and `setrendermode(3)` gives the classic renderer.
 
 Local changes, in `polymost.c` and `polymost_soft.c`:
 
-- Records are version 5. Wall and sprite `pal` read as 0; sprites have no
-  offsets. There are no slopes: floor and ceiling stat bit 2 (a heightmap
+- Records are version 5, with no wall or sprite `pal`. As in classic, walls
+  and masked walls take their sector's `floorpal` and sprites `tspritepal`
+  (the sector's pal, or the player colour `animatesprites` sets). Sprites
+  have no offsets, and their shade is classic's `shade + 6 + sectorshade`. There are no slopes: floor and ceiling stat bit 2 (a heightmap
   here) is masked off, so heightmap floors draw flat, and `getzsofslope`,
   `getflorzofslope` and `getceilzofslope` (in `draw.c`) return the flat
   `ceilingz`/`floorz`.
@@ -132,6 +134,14 @@ dastat)` with `dastat` 2 (320x200 coordinates), plus 8 and the whole screen
 as the clip when flag 2 (the view window) is off, 16 when flag 1 (centre) is
 off and 1 for flag 4 (translucent); `rotatescalesprite` uses `dastat` 2|8
 clipped to the view window. The 2D stays at 320x200.
+
+Known drift from classic in renderers 1 and 2: Polymost's software path has
+no distance shading (upstream), and `rotatescalesprite` centres on the tile's
+picanm offsets plus half its size where classic centres on its middle (the
+same for tiles with no offsets).
+
+`source/build/math.h` is now `buildmath.h`: with `source/build` on the
+include path, MSVC found it for `polymost.c`'s `<math.h>`.
 
 Text, `plotpixel` and the wall-loop helpers were written for `build.c`. The 1994 renderer, map layouts and
 game behavior are still being verified against the DOS executable; this is a

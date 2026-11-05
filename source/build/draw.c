@@ -7,7 +7,7 @@
 #include "board.h"
 #include "display.h"
 #include "engine.h"
-#include "math.h"
+#include "buildmath.h"
 #include "polymost.h"
 #include "tiles.h"
 #include "sdl_window.h"
@@ -2412,10 +2412,8 @@ int getrendermode(void)
 #define animateoffs(pic, obj) animateoffs(pic)
 #define begindrawing()
 #define enddrawing()
-#ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
 #define mulscale16(a, b) mulscale(a, b, 16)
 #define divscale16(a, b) divscale(a, b, 16)
 #define divscale32(a, b) divscale(a, b, 32)
@@ -2482,6 +2480,13 @@ static int polymost_wallfront(int l1, int l2)
 #undef sintable
 #undef animateoffs
 #undef wallfront
+#undef begindrawing
+#undef enddrawing
+#undef min
+#undef max
+#undef mulscale16
+#undef divscale16
+#undef divscale32
 #endif
 /* Polymost takes the sorted list's index, classic the entry's fields. */
 static void drawtsprite(int i)

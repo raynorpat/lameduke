@@ -6,7 +6,7 @@
 #include "engine.h"
 #include "dsl.h"
 #include "fx_man.h"
-#include "math.h"
+#include "buildmath.h"
 #include "music.h"
 #include "platform.h"
 

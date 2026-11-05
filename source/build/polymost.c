@@ -1047,7 +1047,7 @@ static void polymost_drawalls (int32_t bunch)
 
 			if (((cy0 < ocy0) || (cy1 < ocy1)) && (!((sec->ceilingstat&sector[nextsectnum].ceilingstat)&1)))
 			{
-				globalpicnum = wal->picnum; globalshade = wal->shade; globalpal = 0;
+				globalpicnum = wal->picnum; globalshade = wal->shade; globalpal = (int32_t)((unsigned char)sec->floorpal); //classic: the sector's
 				if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 				if (!(wal->cstat&4)) i = sector[nextsectnum].ceilingz; else i = sec->ceilingz;
@@ -1083,7 +1083,7 @@ static void polymost_drawalls (int32_t bunch)
 					gux += (float)(nwal->xpanning-wal->xpanning)*gdx;
 					guy += (float)(nwal->xpanning-wal->xpanning)*gdy;
 				}
-				globalpicnum = nwal->picnum; globalshade = nwal->shade; globalpal = 0;
+				globalpicnum = nwal->picnum; globalshade = nwal->shade; globalpal = (int32_t)((unsigned char)sec->floorpal);
 				if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 				if (!(nwal->cstat&4)) i = sector[nextsectnum].floorz; else i = sec->ceilingz;
@@ -1114,7 +1114,7 @@ static void polymost_drawalls (int32_t bunch)
 		if ((nextsectnum < 0) || (wal->cstat&32))   //White/1-way wall
 		{
 			if (nextsectnum < 0) globalpicnum = wal->picnum; else globalpicnum = wal->overpicnum;
-			globalshade = wal->shade; globalpal = 0;
+			globalshade = wal->shade; globalpal = (int32_t)((unsigned char)sec->floorpal);
 			if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 			if (nextsectnum >= 0) { if (!(wal->cstat&4)) i = nextsec->ceilingz; else i = sec->ceilingz; }
@@ -1486,7 +1486,7 @@ void polymost_drawmaskwall (int32_t damaskwallcnt)
 	globalpicnum = wal->overpicnum; if ((uint32_t)globalpicnum >= MAXTILES) globalpicnum = 0;
 	if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,(short)thewall[z]+16384);
 	globalshade = (int32_t)wal->shade;
-	globalpal = 0;
+	globalpal = (int32_t)((unsigned char)sec->floorpal);
 	globalorientation = (int32_t)wal->cstat;
 
 	sx0 = (float)(wal->x-globalposx); sx1 = (float)(wal2->x-globalposx);
@@ -1733,8 +1733,8 @@ void polymost_drawsprite (int32_t snum)
 	tsprcopy = sprite[tspritelist[snum]]; tsprcopy.owner = tspritelist[snum];
 	tspr = &tsprcopy;
 	globalpicnum      = tspritepicnum[snum];
-	globalshade       = tspr->shade;
-	globalpal         = 0;
+	globalshade       = tspr->shade+6+sectorshade(tspr->sectnum); //classic's static sprite shade
+	globalpal         = tspritepal[snum];
 	globalorientation = tspr->cstat;
 	spritenum         = tspr->owner;
 	if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,spritenum+32768);

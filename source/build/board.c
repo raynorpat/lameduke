@@ -1,7 +1,7 @@
 #include "board.h"
 
 #include "engine.h"
-#include "math.h"
+#include "buildmath.h"
 #include "tiles.h"
 
 #include "platform.h"

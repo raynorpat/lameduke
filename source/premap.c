@@ -12,7 +12,7 @@
 #include "display.h"
 #include "draw.h"
 #include "engine.h"
-#include "math.h"
+#include "buildmath.h"
 
 #include "platform.h"
 
@@ -129,7 +129,8 @@ void check_args(int argc, char **argv)
     }
     if (game_renderer_arg >= 0
         && setrendermode(game_renderer_arg) != (game_renderer_arg > 3 ? 3 : game_renderer_arg))
-        puts("OpenGL renderer unavailable; using the classic renderer.");
+        puts(game_renderer_arg >= 3 ? "OpenGL renderer unavailable; using the classic renderer."
+                                    : "Polymost renderer unavailable in this build; using the classic renderer.");
 }
 
 /* 0x2F190. A lift (SE 17) placed with shade over 16 sets every other lift

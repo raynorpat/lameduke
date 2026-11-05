@@ -10,5 +10,7 @@ void polymost_drawmaskwall(int damaskwallcnt);
 void polymost_drawsprite(int snum);
 void polymost_dorotatesprite(int sx, int sy, int z, short a, short picnum, signed char dashade,
     unsigned char dapalnum, unsigned short dastat, int cx1, int cy1, int cx2, int cy2);
+/* The editor's tile screen; -1 unless renderer 3 drew the tile. */
+int polymost_drawtilescreen(int tilex, int tiley, int wallnum, int dimen);
 
 #endif

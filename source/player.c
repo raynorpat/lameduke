@@ -9,7 +9,7 @@
 #include "sector.h"
 
 #include "board.h"
-#include "math.h"
+#include "buildmath.h"
 #include "tiles.h"
 #include "display.h"
 #include "sdl_input.h"
