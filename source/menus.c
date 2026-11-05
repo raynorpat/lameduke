@@ -203,7 +203,7 @@ static void slider(int y, int *value, int video)
     if (cursory > y - 2 && cursory < y + 14) {
         if (keystatus[0x4B] && viewtic) cursorx = (short)(cursorx - 4);
         if (keystatus[0x4D] && viewtic) cursorx = (short)(cursorx + 4);
-        if (((keystatus[0x4B] || keystatus[0x4D]) && viewtic) || buttons) {
+        if (((keystatus[0x4B] || keystatus[0x4D]) && viewtic) || (buttons & 1)) {
             int x = cursorx - 176;
             *value = x < 0 ? 0 : x >= 128 ? 255 : x * 2;
         }
@@ -219,6 +219,7 @@ static void scoretext(int x, int y, const char *s, int shade);
 static videocfg_t video_pending;
 static int video_pending_row = -1;
 static int video_w[256], video_h[256], video_count, video_mode;
+static int video_slider_key, video_slider_row;
 
 void menus_applyvideo(void)
 {
@@ -267,6 +268,7 @@ static void video_init(void)
     for (i = 0; i < video_count; i++)
         if (video_w[i] == videocfg_active.width && video_h[i] == videocfg_active.height) video_mode = i;
     cursorx = 160; cursory = 46;
+    video_slider_key = 0; video_slider_row = -1;
 }
 
 static int video_dim(int row)
@@ -332,14 +334,20 @@ static void videomenu(void)
     if (keystatus[0x4b] || keystatus[0xcb]) dir = -1;
     if (keystatus[0x4d] || keystatus[0xcd]) dir = 1;
     if (row == 9 && enter) { menupage = 30; return; }
-    if (video_dim(row)) { keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0; return; }
+    if (video_slider_row != row) video_slider_key = 0;
+    if (video_dim(row)) { video_slider_key = 0; keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0; return; }
     if (row == 6 || row == 7) {
+        if (dir && !viewtic) { video_slider_key = dir; video_slider_row = row; }
+        if (viewtic && video_slider_key) {
+            dir = video_slider_key; video_slider_key = 0;
+            keystatus[dir < 0 ? 0x4b : 0x4d] = 1;
+        }
         v = row == 6 ? (int)((c.contrast - .5) * 255) : (int)(c.saturation * 127.5);
         /* slider uses keypad arrows; normalize extended arrows for it. */
         if (keystatus[0xcb]) keystatus[0x4b] = 1;
         if (keystatus[0xcd]) keystatus[0x4d] = 1;
         slider(40 + 12 * row, &v, 1);
-        if (dir || buttons) {
+        if ((dir && viewtic) || (buttons & 1)) {
             if (row == 6) c.contrast = .5 + v / 255.0;
             else c.saturation = v / 127.5;
             video_pending = c; video_pending_row = row;
@@ -362,7 +370,8 @@ static void videomenu(void)
         }
         video_pending = c; video_pending_row = row;
     }
-    keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0;
+    if ((row != 6 && row != 7) || viewtic)
+        keystatus[0x4b] = keystatus[0xcb] = keystatus[0x4d] = keystatus[0xcd] = 0;
 }
 
 /* The high score table (aItOnlyLooksPai, dword_82568), read and written with
