@@ -113,6 +113,11 @@ the same way it records `build.c`.
    - The recorded demos keep playing in sync and at the same speed they
      play now (`demo_hz` already tells 120 Hz and 720 Hz recordings apart).
    - This is its own task, early in the plan, independent of Polymost.
+   - **Smooth drawing** *(user, added after Task 2)*: as in duke3d, each
+     frame draws the camera, sprites and moving sectors interpolated
+     between the last two logic steps (`smoothratio`), in every renderer
+     *(the scope is my call)*. Interpolation is draw-only: game state and
+     demos are unchanged.
 11. **Docs**: README covers renderers, the Video Options page, `duke.cfg`,
    `/p`, and the editor's `build.cfg` and Alt+K. `VENDORED.md` records
    the import commit and every local change, as it does for `build.c`.
