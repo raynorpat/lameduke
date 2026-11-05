@@ -126,6 +126,8 @@ void drawpoly (double *dpx, double *dpy, int32_t n, int32_t method);
 #include "polymost_soft.c"
 #ifdef USE_OPENGL
 #include "polymost_opengl.c"
+#else
+#define FOGSCALED(scale, draw) draw;
 #endif
 
 
@@ -768,7 +770,7 @@ static void polymost_drawalls (int32_t bunch)
 												  else { gux *= r; guy *= r; guo *= r; }
 				}
 			}
-			pow2xsplit = 0; domost(x0,fy0,x1,fy1); //flor
+			pow2xsplit = 0; FOGSCALED(GLFOG_FLAT, domost(x0,fy0,x1,fy1)) //flor
 		}
 		else if ((nextsectnum < 0) || (!(sector[nextsectnum].floorstat&1)))
 		{
@@ -932,7 +934,7 @@ static void polymost_drawalls (int32_t bunch)
 												  else { gux *= r; guy *= r; guo *= r; }
 				}
 			}
-			pow2xsplit = 0; domost(x1,cy1,x0,cy0); //ceil
+			pow2xsplit = 0; FOGSCALED(GLFOG_FLAT, domost(x1,cy1,x0,cy0)) //ceil
 		}
 		else if ((nextsectnum < 0) || (!(sector[nextsectnum].ceilingstat&1)))
 		{
@@ -1747,6 +1749,7 @@ void polymost_drawsprite (int32_t snum)
 
 #ifdef USE_OPENGL
 	polymost_gl_beginmasked(tspr->sectnum);
+	glfogshades *= GLFOG_SPRITE; //the next beginmasked sets it again
 #endif
 
 	switch((globalorientation>>4)&3)

@@ -279,6 +279,13 @@ static float polymost_shaderamp (int32_t picnum, int32_t shade, float *zero)
 static float glfogshades = 0.f;
 static float glfogstart = 0.f, glfogend = 1.f; //what GL has
 
+	//...and its floors and ceilings (hlinedriver's d>>visibility, d 6.4 times the
+	//   distance) 4/5 of that, its sprites (drawsprite's depth>>(visibility+4),
+	//   depth 256 times the distance) twice it
+#define GLFOG_FLAT 0.8f
+#define GLFOG_SPRITE 2.f
+#define FOGSCALED(scale, draw) { float fogshades_ = glfogshades; glfogshades *= (scale); draw; glfogshades = fogshades_; }
+
 static void polymost_fogvis (int32_t vis)
 {
 	(void)vis;

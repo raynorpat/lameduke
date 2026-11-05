@@ -101,6 +101,31 @@ static void write_frame(const char *path)
     free(gl);
 }
 
+/* Debug aid: LAMEDUKE_SWITCH=<frame>:<renderer>[,...] switches renderer
+   after that many frames are shown, as a menu would. */
+static void debug_switch(int frame)
+{
+    static const char *spec;
+    static int read;
+    const char *p;
+
+    if (!read) {
+        spec = getenv("LAMEDUKE_SWITCH");
+        read = 1;
+    }
+    for (p = spec; p && *p; p = strchr(p, ',') ? strchr(p, ',') + 1 : NULL) {
+        const char *c = strchr(p, ':');
+
+        if (!c)
+            break;
+        if (atoi(p) == frame) {
+            game_setrenderer(atoi(c + 1));
+            printf("renderer switch %d: requested %d, using %d\n",
+                   frame, atoi(c + 1), getrendermode());
+        }
+    }
+}
+
 static void present(void)
 {
     static int presented;
@@ -131,6 +156,7 @@ static void present(void)
     }
     platform_present(framebuffer(), xdim, ydim);
     presented++;
+    debug_switch(presented);
 }
 
 /* totalclock's ticks in t/per seconds. main (0x15BE7) runs sub_102A0 at

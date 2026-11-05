@@ -20,5 +20,8 @@ extern int game_quotes;
 extern int game_debug;
 /* /p#, the renderer for this run (draw.h's setrendermode); -1 without it. */
 extern int game_renderer_arg;
+/* Switches to a renderer (making renderer 3's window when it has to), or
+   says why it can't and keeps the one in use. */
+void game_setrenderer(int renderer);
 
 #endif

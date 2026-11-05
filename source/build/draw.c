@@ -2587,8 +2587,10 @@ static void glview_begin(void)
     int *v[9] = { &xdim, &ydim, &windowx1, &windowy1, &windowx2, &windowy2, &xdimen, &ydimen, &globalhoriz };
     int i;
 
-    if (rendmode != 3)
+    if (rendmode != 3) {
+        glviewscale = 1.0;
         return;
+    }
     for (i = 0; i < 9; i++)
         glsaved[i] = *v[i];
     polymost_glpalette();

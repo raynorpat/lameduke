@@ -1,6 +1,7 @@
 #include "sdl_window.h"
 #include "display.h"
 #include "draw.h"
+#include "engine.h"
 
 #include <SDL.h>
 #include <stdio.h>
@@ -124,11 +125,12 @@ static int gl_alloc8(int width, int height)
 /* An 8-bit frame through the GL context, as the SDL renderer shows it: the
    palette applied, nearest pixel, 4:3 with black bars. Renderer 3's state is
    kept for its next frame. */
-static void gl_present8(const unsigned char *src)
+static void gl_present8(const unsigned char *src, int swap)
 {
     int r[4];
     float u = (float)tex_w / (float)gl8tex_w, v = (float)tex_h / (float)gl8tex_h;
 
+    framedrawn = 0;
     expand(src, tex_w * tex_h);
     SDL_GL_GetDrawableSize(window, &gl_draw_w, &gl_draw_h);
     gl_fitrect(4, 3, gl_draw_w, gl_draw_h, r);
@@ -183,7 +185,8 @@ static void gl_present8(const unsigned char *src)
     glPopMatrix();
     glPopAttrib();
     glsub_sync();
-    SDL_GL_SwapWindow(window);
+    if (swap)
+        SDL_GL_SwapWindow(window);
 }
 
 /* The largest frame the shader path can draw, and at most GLSHDOWNMAXSCALE
@@ -429,7 +432,7 @@ void platform_present(const void *pixels, int width, int height)
         return;
 #ifdef USE_OPENGL
     if (glcontext) {
-        gl_present8((const unsigned char *)pixels);
+        gl_present8((const unsigned char *)pixels, 1);
         return;
     }
 #endif
@@ -448,26 +451,34 @@ unsigned char *platform_capture(int *w, int *h)
     unsigned char *buf;
     int y, row;
 
-    if (!glcontext || getrendermode() != 3 || !framedrawn)
+    if (!glcontext)
         return NULL;
-    *w = xres;
-    *h = yres;
-    buf = polymost_capture_shader();
-    if (buf)
-        return buf;
-    row = xres * 3;
-    buf = (unsigned char *)malloc((size_t)row * (size_t)(yres + 1));
+    if (getrendermode() == 3 && framedrawn) {
+        *w = xres;
+        *h = yres;
+        buf = polymost_capture_shader();
+        if (buf)
+            return buf;
+    } else {
+        /* Exercise the same presentation path as the window, including after
+           a mid-run switch. Reading framebuffer() would hide a blank window. */
+        if (rgb && tex_w == xdim && tex_h == ydim)
+            gl_present8(framebuffer(), 0);
+        SDL_GL_GetDrawableSize(window, w, h);
+    }
+    row = *w * 3;
+    buf = (unsigned char *)malloc((size_t)row * (size_t)(*h + 1));
     if (!buf)
         return NULL;
     glsub_flush();
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, xres, yres, GL_RGB, GL_UNSIGNED_BYTE, buf);
+    glReadPixels(0, 0, *w, *h, GL_RGB, GL_UNSIGNED_BYTE, buf);
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
     /* GL's rows are bottom-up; the spare row swaps them */
-    for (y = 0; y < yres / 2; y++) {
-        memcpy(buf + (size_t)row * yres, buf + (size_t)row * y, (size_t)row);
-        memcpy(buf + (size_t)row * y, buf + (size_t)row * (yres - 1 - y), (size_t)row);
-        memcpy(buf + (size_t)row * (yres - 1 - y), buf + (size_t)row * yres, (size_t)row);
+    for (y = 0; y < *h / 2; y++) {
+        memcpy(buf + (size_t)row * *h, buf + (size_t)row * y, (size_t)row);
+        memcpy(buf + (size_t)row * y, buf + (size_t)row * (*h - 1 - y), (size_t)row);
+        memcpy(buf + (size_t)row * (*h - 1 - y), buf + (size_t)row * *h, (size_t)row);
     }
     return buf;
 #else
@@ -481,6 +492,7 @@ int setgamemode_gl(int width, int height)
 {
 #ifdef USE_OPENGL
     const char *exts;
+    int w8 = tex_w, h8 = tex_h; /* the 8-bit frame's size, shown through GL from now */
 
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         video_error = SDL_GetError();
@@ -542,6 +554,8 @@ int setgamemode_gl(int width, int height)
         || gl_has_extension(exts, "GL_SGIS_texture_edge_clamp");
     glinfo.texcompr = gl_has_extension(exts, "GL_ARB_texture_compression");
     glinfo.texnpot = gl_has_extension(exts, "GL_ARB_texture_non_power_of_two");
+    if (w8 && gl_alloc8(w8, h8) != 0)
+        return -1;
     gl_initdrawpath(exts);
     glsub_init();
     gl_resvars();
@@ -606,9 +620,16 @@ int getvideomodelist(int *w, int *h, int max, int *desktopw, int *desktoph)
         *desktopw = mode.w;
         *desktoph = mode.h;
     }
+    /* SDL lists a size once per refresh rate, highest first: one entry each */
     count = SDL_GetNumDisplayModes(0);
     for (i = 0; i < count && n < max; i++) {
-        if (SDL_GetDisplayMode(0, i, &mode) == 0) {
+        int j;
+
+        if (SDL_GetDisplayMode(0, i, &mode) != 0)
+            continue;
+        for (j = 0; j < n && (w[j] != mode.w || h[j] != mode.h); j++)
+            ;
+        if (j == n) {
             w[n] = mode.w;
             h[n] = mode.h;
             n++;

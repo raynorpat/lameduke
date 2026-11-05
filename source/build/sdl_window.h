@@ -7,8 +7,8 @@ void platform_present(const void *pixels, int width, int height);
 void platform_shutdown(void);
 void platform_title(const char *text);
 const char *platform_title_text(void);
-/* Renderer 3: the frame about to be shown, as RGB rows top first in a
-   malloc'd buffer of *w by *h; NULL when this frame is the 8-bit one. */
+/* The frame about to be shown through GL, as RGB rows top first in a
+   malloc'd buffer of *w by *h; NULL without a GL context. */
 unsigned char *platform_capture(int *w, int *h);
 
 /* The size renderer 3 draws at (duke3d's): the GL drawable's, or larger

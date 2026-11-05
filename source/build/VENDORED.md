@@ -176,7 +176,9 @@ Renderer 3, local changes for the OpenGL backend:
 - `polymost_fogvis` shades at this engine's classic wall rate
   (`depth>>(visibility-3)` shades, `draw.c`'s `wallscan`) instead of
   duke3d's `globalvisibility` and sector visibility, which the 1994 engine
-  doesn't have. Sprites shade at that rate too, half classic's.
+  doesn't have. Sprite fog is twice the wall rate, matching Classic's
+  `depth>>(visibility+4)` on a depth scaled by 256. Flat floors and ceilings
+  use 4/5 of the wall rate, matching `hlinedriver`'s distance scale.
 - The HUD and 2D drawn with `rotatesprite` come out through Polymost at the
   window's size; text, fills and anything else the game draws into the 8-bit
   frame aren't shown in renderer 3 yet.

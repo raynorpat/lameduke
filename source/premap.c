@@ -127,13 +127,23 @@ void check_args(int argc, char **argv)
             exit(0);
         }
     }
+    if (game_renderer_arg >= 0)
+        game_setrenderer(game_renderer_arg);
+}
+
+void game_setrenderer(int renderer)
+{
+    int prev = getrendermode();
+
     /* shortcut: renderer 3's window is 1280x720 until duke.cfg sets it */
-    if (game_renderer_arg >= 3)
+    if (renderer >= 3 && !getvideoglpath())
         setgamemode_gl(1280, 720);
-    if (game_renderer_arg >= 0
-        && setrendermode(game_renderer_arg) != (game_renderer_arg > 3 ? 3 : game_renderer_arg))
-        puts(game_renderer_arg >= 3 ? "OpenGL renderer unavailable; using the classic renderer."
-                                    : "Polymost renderer unavailable in this build; using the classic renderer.");
+    if (setrendermode(renderer) != (renderer > 3 ? 3 : renderer)) {
+        printf("%s; %s\n", renderer >= 3 ? "OpenGL renderer unavailable"
+                                               : "Polymost renderer unavailable in this build",
+               prev ? "keeping the current renderer." : "using the classic renderer.");
+        setrendermode(prev);
+    }
 }
 
 /* 0x2F190. A lift (SE 17) placed with shade over 16 sets every other lift
