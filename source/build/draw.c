@@ -3355,7 +3355,7 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
                     continue;
                 for (r = 0; r < 16; r++) {
                     if (hires) {
-                        int dy = (spritering[r] + 1920) / 640 - 3;
+                        int dy = (spritering[r] + (spritering[r] < 0 ? -320 : 320)) / 640;
                         plotpixel(sx + spritering[r] - dy * 640, sy + dy, (char)col);
                     } else
                         frame[pageoffset + sx + 640 * sy + spritering[r]] = (unsigned char)col;

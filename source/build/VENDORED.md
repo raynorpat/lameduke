@@ -37,7 +37,7 @@ a comparison point, not an asserted ancestor of the code here.
 | `board.c`, `board.h` | Version-5 map loading, packed sector/wall/sprite records, sprite lists, collision and spatial queries. The records are 37, 35 and 38 bytes, respectively, as read by this beta. |
 | `draw.c`, `draw.h` | The classic software room and mask drawers and `rotatesprite`, reconstructed from the executable. They replace the earlier portal approximation. |
 | `display.c`, `display.h` | Palette and lookup loading, display mode and view setup. |
-| `tiles.c`, `tiles.h` | Loose `TILES000.ART`â€“`TILES007.ART` tile loading and access. |
+| `tiles.c`, `tiles.h` | Loose `TILES000.ART`-`TILES007.ART` tile loading and access. |
 | `math.c`, `buildmath.h` | Sine-table loading and engine math helpers. |
 | `cache.c`, `cache1d.h` | Cache interface used by this rebuild. |
 | `engine.c`, `engine.h` | Engine initialization and reading the original `SETUP.DAT` bytes. |
