@@ -619,6 +619,12 @@ int main(int argc, char **argv)
     }
 
     puts("Init engine...");
+#ifdef USE_OPENGL
+    {
+        extern int polymosttexfullbright;
+        polymosttexfullbright = 240;
+    }
+#endif
     initengine();
     timer_init();
 

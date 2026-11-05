@@ -323,7 +323,7 @@ static int displayraise(short p, int shade)
         return 1;
     overlaypal((syncavel[p] >> 4) + 160 - (pl->lookang >> 1), bob + 180 - (pl->horiz >> 4),
         raiseframes[pl->ba3 - 1] + 681, shade, 3);
-    if (pl->ba3 == 5)
+    if (viewtic && pl->ba3 == 5)
         spritesound(7, pl->i);
     return 1;
 }
@@ -492,9 +492,9 @@ static void displayweapon(short p)
         return;
     }
     if (frame < 15) {
-        if (frame == 10)
+        if (viewtic && frame == 10)
             spritesound(34, pl->i);
-        if (frame == 13)
+        if (viewtic && frame == 13)
             spritesound(33, pl->i);
         overlaypal((syncavel[p] >> 3) + 240 - 8 * frame - aim, bob + 130 + 16 * frame - yb - hz, 1162, shade, 3);
         overlaypal((syncavel[p] >> 3) + 220 - aim, bob + 220 - yb - hz, 1161, shade, 3);
