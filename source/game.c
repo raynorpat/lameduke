@@ -569,7 +569,8 @@ int main(int argc, char **argv)
         int r = PLAY_LEVEL;
 
         if (!game_level_set) {
-            int index = 1;
+            const char *pick = getenv("LAMEDUKE_DEMO");
+            int index = pick && pick[0] ? atoi(pick) & 7 : 1;
 
             for (;;) {
                 demo_t demo;
