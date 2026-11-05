@@ -11,8 +11,10 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Software renderer from D3D.EXE. OpenGL is only the presentation path,
-# following duke3d's SDL/GL platform layer. Polymost is not in this binary.
+# following duke3d's SDL/GL platform layer. Polymost's renderers, picked
+# with /p, come from duke3d.
 option(LAMEDUKE_OPENGL "Present the framebuffer through OpenGL" ON)
+option(LAMEDUKE_POLYMOST "Build Polymost's renderers" ON)
 set(LAMEDUKE_FETCH_SDL "AUTO" CACHE STRING "See cmake/Dependencies.cmake")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

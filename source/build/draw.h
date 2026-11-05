@@ -36,6 +36,13 @@ void plotpixel(int x, int y, char col);
 void nextpage(void);
 void showpage(void);
 
+/* The renderer: 0 classic, 1 Polymost solid colour, 2 Polymost software,
+   3 Polymost OpenGL. setrendermode clamps to what this build has (0 without
+   Polymost) and returns the one in use. */
+extern int rendmode;
+int setrendermode(int renderer);
+int getrendermode(void);
+
 void draw_init(void);
 const unsigned char *framebuffer(void);
 int framebuffer_pitch(void);

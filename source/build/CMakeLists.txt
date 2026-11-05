@@ -23,6 +23,14 @@ else()
   target_sources(buildengine PRIVATE plat_unix.c)
 endif()
 
+# draw.c includes polymost.c, which includes its backends.
+if(LAMEDUKE_POLYMOST)
+  target_compile_definitions(buildengine PUBLIC POLYMOST=1)
+  target_sources(buildengine PRIVATE polymost.c polymost_soft.c polymost_opengl.c)
+  set_source_files_properties(polymost.c polymost_soft.c polymost_opengl.c
+    PROPERTIES HEADER_FILE_ONLY ON)
+endif()
+
 target_include_directories(buildengine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(buildengine PUBLIC lameduke_compile_options ${LAMEDUKE_SDL2_TARGET})
 

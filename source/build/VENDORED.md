@@ -42,7 +42,8 @@ a comparison point, not an asserted ancestor of the code here.
 | `cache.c`, `cache1d.h` | Cache interface used by this rebuild. |
 | `engine.c`, `engine.h` | Engine initialization and reading the original `SETUP.DAT` bytes. |
 | `network.c`, `network.h` | Single-player connection state; multiplayer is a stub and opens no connection. |
-| `sdl_main.c`, `sdl_input.c`, `sdl_window.c`, `sdl_sys.c`, `sdl_opengl.c` and headers | SDL2 startup, input, timing and framebuffer presentation. The OpenGL presentation function is a stub; there is no Polymost world renderer. |
+| `sdl_main.c`, `sdl_input.c`, `sdl_window.c`, `sdl_sys.c`, `sdl_opengl.c` and headers | SDL2 startup, input, timing and framebuffer presentation. `sdl_opengl.c` is duke3d's and is not built yet. |
+| `polymost.c`, `polymost_soft.c`, `polymost_opengl*`, `polymost.h` | duke3d's Polymost; see below. |
 | `platform.h`, `plat_unix.c`, `plat_win32.c` | Platform file access, including case-insensitive filename fallback on Unix. |
 | `CMakeLists.txt` | Builds the engine as a static library for the game, the editor and the map tools. |
 
@@ -79,6 +80,58 @@ shared with the 1994 BUILD:
 - the full 2D view `draw2dscreen` with editor highlights (0x5445E);
 - `draw2dgrid` (0x5417F) and `clear2dscreen` (0x54130);
 - the 640x480 split-screen 2D mode `qsetmode640480` (0x53FF8).
+
+## Polymost
+
+`polymost.c`, `polymost_soft.c`, `polymost_opengl.c`,
+`polymost_opengl_submit.c`, `polymost_opengl_submit.h`, `sdl_opengl.c` and
+`sdl_opengl_internal.h` come from
+[raynorpat/duke3d](https://github.com/raynorpat/duke3d) at
+`8f076354eec06b9b41d53419a801b7db93b7685d` (`source/build/`): Ken
+Silverman's Polymost under [BUILDLIC.TXT](BUILDLIC.TXT), with JFBuild's,
+icculus's and duke3d's changes. Commit `d8c91dd` holds them unchanged, so
+`git diff d8c91dd -- source/build/polymost* source/build/sdl_opengl*` shows
+every local change. `draw.c` includes `polymost.c` (as duke3d's `engine.c`
+does) when CMake's `LAMEDUKE_POLYMOST` is on, and its `drawrooms`,
+`drawmaskwall`, `drawmasks`, `rotatesprite` and `rotatescalesprite` call
+Polymost when `rendmode` is not 0. `/p#` picks the renderer: 1 solid colour,
+2 software. Renderer 3 (OpenGL) is not built yet: `polymost.c` is compiled
+without `USE_OPENGL`, and `setrendermode(3)` gives the classic renderer.
+
+Local changes, in `polymost.c` and `polymost_soft.c`:
+
+- Records are version 5. Wall and sprite `pal` read as 0; sprites have no
+  offsets. There are no slopes: floor and ceiling stat bit 2 (a heightmap
+  here) is masked off, so heightmap floors draw flat, and `getzsofslope`,
+  `getflorzofslope` and `getceilzofslope` (in `draw.c`) return the flat
+  `ceilingz`/`floorz`.
+- The visible sprites are collected by `draw.c`'s `scansprites`, the classic
+  renderer's own pass, into `tspritelist`, `tspritepicnum` and `tspritepal`,
+  which the game's `animatesprites` edits. `polymost_drawsprite` draws a copy
+  of `sprite[tspritelist[n]]` with `tspritepicnum[n]` and its sprite number
+  in `owner`, and `polymost_spritenear` passes that number to `draw.c`'s
+  `spritewallfront`.
+- The horizon row is `globalhoriz - startumost[0]`: `draw.c` counts rows
+  from the top of the 200-row screen, duke3d from the top of the window.
+- duke3d's fractional view angle and horizon (`viewyawfraction`,
+  `viewhorizonfraction`), the automap marking and `hitallsprites` are gone;
+  the editor pick's `hitscan` takes this engine's arguments.
+- `polymost_soft.c` addresses rows as `y*bytesperline`, without `ylookup`.
+
+`draw.c` supplies the rest of what duke3d's engine gives `polymost.c`, as
+macros and small functions around the `#include`: `draw.c`'s statics are
+used directly; `viewingrange`, `xyaspect` and `yxaspect` are 65536 (a 90
+degree view at 320x200's aspect, as classic draws it), `xdimenscale` is
+`draw.c`'s `viewingrange`, `frameplace` is the frame and `bytesperline` its
+pitch; `tempbuf`, `sectorborder` and `sintable` map to `bunchgot`,
+`sectorstack` and `sintable()`; `wallfront` is mapped to duke3d's 0/1
+answer; `animateoffs` drops its second argument; `widescreen` is 0.
+`rotatesprite(sx, sy, picnum, shade, flags, pal)` is drawn as
+`polymost_dorotatesprite(sx<<16, sy<<16, 65536, 0, picnum, shade, pal,
+dastat)` with `dastat` 2 (320x200 coordinates), plus 8 and the whole screen
+as the clip when flag 2 (the view window) is off, 16 when flag 1 (centre) is
+off and 1 for flag 4 (translucent); `rotatescalesprite` uses `dastat` 2|8
+clipped to the view window. The 2D stays at 320x200.
 
 Text, `plotpixel` and the wall-loop helpers were written for `build.c`. The 1994 renderer, map layouts and
 game behavior are still being verified against the DOS executable; this is a

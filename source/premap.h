@@ -18,5 +18,7 @@ extern int game_level_set;
 /* /q (byte_1257A9) and /d (word_1257AD). Read by code lifted in later tasks. */
 extern int game_quotes;
 extern int game_debug;
+/* /p#, the renderer for this run (draw.h's setrendermode); -1 without it. */
+extern int game_renderer_arg;
 
 #endif

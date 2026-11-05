@@ -8,9 +8,12 @@
 #include "display.h"
 #include "engine.h"
 #include "math.h"
+#include "polymost.h"
 #include "tiles.h"
 #include "sdl_window.h"
 
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAXXDIM 640
@@ -287,6 +290,31 @@ static void scanwall(short sectnum, short w)
     }
 }
 
+/* The sector's sprites that face the eye, or are wall or floor sprites, go
+   on the list drawmasks sorts. Polymost collects them the same way. */
+static void scansprites(short sect)
+{
+    short i;
+
+    for (i = headspritesect[sect]; i != -1; i = nextspritesect[i]) {
+        int xs = sprite[i].x - globalposx;
+        int ys = sprite[i].y - globalposy;
+        int yp = (imul(ys, singlobalang) + imul(xs, cosglobalang)) >> 6;
+
+        if (yp > 1024 || (sprite[i].cstat & 0x30)) {
+            if (yp > 1024)
+                spritesx[spritesortcnt] = (int)((long long)(xdimen << 7)
+                    * ((imul(ys, cosglobalang) - imul(singlobalang, xs)) >> 6) / yp)
+                    + (xdimen << 7);
+            tspritepicnum[spritesortcnt] = sprite[i].picnum;
+            spritesy[spritesortcnt] = yp;
+            tspritepal[spritesortcnt] = (sector[sect].ceilingstat & 1)
+                ? sector[sect].ceilingpal : sector[sect].floorpal;
+            tspritelist[spritesortcnt++] = i;
+        }
+    }
+}
+
 /* 0x442B8 */
 static void scansector(short sectnum)
 {
@@ -300,23 +328,7 @@ static void scansector(short sectnum)
         short w, endw, scanfirst, bunchfrst;
         short startbunch;
 
-        for (i = headspritesect[sect]; i != -1; i = nextspritesect[i]) {
-            int xs = sprite[i].x - globalposx;
-            int ys = sprite[i].y - globalposy;
-            int yp = (imul(ys, singlobalang) + imul(xs, cosglobalang)) >> 6;
-
-            if (yp > 1024 || (sprite[i].cstat & 0x30)) {
-                if (yp > 1024)
-                    spritesx[spritesortcnt] = (int)((long long)(xdimen << 7)
-                        * ((imul(ys, cosglobalang) - imul(singlobalang, xs)) >> 6) / yp)
-                        + (xdimen << 7);
-                tspritepicnum[spritesortcnt] = sprite[i].picnum;
-                spritesy[spritesortcnt] = yp;
-                tspritepal[spritesortcnt] = (sector[sect].ceilingstat & 1)
-                    ? sector[sect].ceilingpal : sector[sect].floorpal;
-                tspritelist[spritesortcnt++] = i;
-            }
-        }
+        scansprites(sect);
         gotsector[sect >> 3] |= (unsigned char)(1 << (sect & 7));
 
         bunchfrst = numscans;
@@ -1494,6 +1506,12 @@ void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, sho
     smostwallcnt = 0;
     spritesortcnt = 0;
     smostcnt = 0;
+#ifdef POLYMOST
+    if (rendmode) {
+        polymost_drawrooms();
+        return;
+    }
+#endif
     scansector(globalcursectnum);
 
     while (numbunches > 0 && numhits > 0) {
@@ -1625,6 +1643,12 @@ static void drawmaskwall(short damaskwallcnt)
     sectortype *sec = &sector[sectnum], *nsec = &sector[wall[w].nextsector];
     int z1, z2, x, k;
 
+#ifdef POLYMOST
+    if (rendmode) {
+        polymost_drawmaskwall(damaskwallcnt);
+        return;
+    }
+#endif
     globalpal = sec->floorpal;
     z1 = sec->ceilingz > nsec->ceilingz ? sec->ceilingz : nsec->ceilingz;
     z2 = sec->floorz < nsec->floorz ? sec->floorz : nsec->floorz;
@@ -2338,6 +2362,139 @@ static void drawsprite(int sxpos, int depth, short tilenum, short spritenum, int
     }
 }
 
+/* Renderer in use; see draw.h. */
+int rendmode;
+
+int setrendermode(int renderer)
+{
+#ifdef POLYMOST
+    if (renderer < 0)
+        renderer = 0;
+    if (renderer > 3)
+        renderer = 3;
+    /* shortcut: this build has no OpenGL renderer yet, so 3 is classic. */
+    if (renderer == 3)
+        renderer = 0;
+    rendmode = renderer;
+#endif
+    return rendmode;
+}
+
+int getrendermode(void)
+{
+    return rendmode;
+}
+
+#ifdef POLYMOST
+/* What duke3d's engine gives polymost.c, from this engine's state. The view
+   is drawn as duke3d's at a 320x200 aspect: its viewingrange (the field of
+   view, 65536 for 90 degrees) is 65536 here, where draw.c's viewingrange is
+   the window's width over 320, which is duke3d's xdimenscale. */
+#define xdimenscale ((xdimen << 16) / 320)
+#define viewingrange 65536
+#define xyaspect 65536
+#define yxaspect 65536
+#define halfxdimen (xdimen >> 1)
+#define cosviewingrangeglobalang cosglobalang
+#define sinviewingrangeglobalang singlobalang
+#define widescreen 0
+#define pixelaspect 65536
+#define ydimenscale xdimenscale
+/* Polymost draws through pointers into frame. */
+#define frameplace ((intptr_t)frame)
+#define bytesperline pitch()
+#define frameoffset polyframeoffset
+#define tempbuf bunchgot
+#define sectorborder sectorstack
+#define sectorbordercnt sectorstackcnt
+#define sintable sintable()
+/* The tile only: the 1996 second argument picks a random frame. */
+#define animateoffs(pic, obj) animateoffs(pic)
+#define begindrawing()
+#define enddrawing()
+#ifndef min
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#endif
+#define mulscale16(a, b) mulscale(a, b, 16)
+#define divscale16(a, b) divscale(a, b, 16)
+#define divscale32(a, b) divscale(a, b, 32)
+static intptr_t polyframeoffset;
+static char inpreparemirror;
+static const unsigned char pow2char[8] = { 1, 2, 4, 8, 16, 32, 64, 128 };
+
+static int scale(int a, int b, int c)
+{
+    return (int)((long long)a * b / c);
+}
+
+/* No slopes: sector z is flat. */
+static void getzsofslope(short sectnum, int x, int y, int *ceilz, int *florz)
+{
+    (void)x;
+    (void)y;
+    *ceilz = sector[sectnum].ceilingz;
+    *florz = sector[sectnum].floorz;
+}
+
+static int getflorzofslope(short sectnum, int x, int y)
+{
+    (void)x;
+    (void)y;
+    return sector[sectnum].floorz;
+}
+
+static int getceilzofslope(short sectnum, int x, int y)
+{
+    (void)x;
+    (void)y;
+    return sector[sectnum].ceilingz;
+}
+
+/* duke3d's wallfront: 0 when l1 is in front, 1 when l2 is, negative when unknown. */
+static int polymost_wallfront(int l1, int l2)
+{
+    int j = wallfront(l1, l2);
+
+    return j < 0 ? j : j == l2;
+}
+#define wallfront polymost_wallfront
+
+#undef USE_OPENGL /* shortcut: no OpenGL backend until the GL window exists */
+#include "polymost.c"
+
+#undef xdimenscale
+#undef viewingrange
+#undef xyaspect
+#undef yxaspect
+#undef halfxdimen
+#undef cosviewingrangeglobalang
+#undef sinviewingrangeglobalang
+#undef widescreen
+#undef pixelaspect
+#undef ydimenscale
+#undef frameplace
+#undef bytesperline
+#undef frameoffset
+#undef tempbuf
+#undef sectorborder
+#undef sectorbordercnt
+#undef sintable
+#undef animateoffs
+#undef wallfront
+#endif
+/* Polymost takes the sorted list's index, classic the entry's fields. */
+static void drawtsprite(int i)
+{
+#ifdef POLYMOST
+    if (rendmode) {
+        polymost_drawsprite(i);
+        return;
+    }
+#endif
+    drawsprite(spritesx[i], spritesy[i], tspritepicnum[i], tspritelist[i], tspritepal[i]);
+}
+
 /* 0x4BFDB */
 void drawmasks(void)
 {
@@ -2375,11 +2532,17 @@ void drawmasks(void)
             int first = -1, drawn = 0, k;
 
             for (i = spritesortcnt - 2; i >= 0; i--) {
-                int xs = spritesx[i] >> 8;
+                int xs = spritesx[i] >> 8, over;
 
-                if (xs >= xb1[mw] && xs <= xb2[mw] && !spritewallfront(tspritelist[i], thewall[mw])) {
+#ifdef POLYMOST
+                if (rendmode)
+                    over = dxb1[mw] <= spritesx[i] / 256.0 && spritesx[i] / 256.0 <= dxb2[mw];
+                else
+#endif
+                    over = xs >= xb1[mw] && xs <= xb2[mw];
+                if (over && !spritewallfront(tspritelist[i], thewall[mw])) {
                     drawn++;
-                    drawsprite(spritesx[i], spritesy[i], tspritepicnum[i], tspritelist[i], tspritepal[i]);
+                    drawtsprite(i);
                     first = i;
                     tspritelist[i] = -1;
                 }
@@ -2402,16 +2565,11 @@ void drawmasks(void)
             }
             drawmaskwall((short)--maskwallcnt);
         } else {
-            spritesortcnt--;
-            drawsprite(spritesx[spritesortcnt], spritesy[spritesortcnt], tspritepicnum[spritesortcnt],
-                tspritelist[spritesortcnt], tspritepal[spritesortcnt]);
+            drawtsprite(--spritesortcnt);
         }
     }
-    while (spritesortcnt > 0) {
-        spritesortcnt--;
-        drawsprite(spritesx[spritesortcnt], spritesy[spritesortcnt], tspritepicnum[spritesortcnt],
-            tspritelist[spritesortcnt], tspritepal[spritesortcnt]);
-    }
+    while (spritesortcnt > 0)
+        drawtsprite(--spritesortcnt);
     while (maskwallcnt > 0)
         drawmaskwall((short)--maskwallcnt);
 }
@@ -2450,6 +2608,20 @@ void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char
 
     if (w <= 0 || h <= 0 || !waloff[picnum])
         return;
+#ifdef POLYMOST
+    /* Flag 2 is the view window, scaled; without it the whole screen. 1
+       centres on the picanm offsets (Polymost's 16 is the top-left corner)
+       and 4 is translucent. */
+    if (rendmode) {
+        if (flags & 2)
+            polymost_dorotatesprite(sx << 16, sy << 16, 65536, 0, picnum, shade, pal,
+                (flags & 1 ? 2 : 2 | 16) | (flags & 4 ? 1 : 0), windowx1, windowy1, windowx2, windowy2);
+        else
+            polymost_dorotatesprite(sx << 16, sy << 16, 65536, 0, picnum, shade, pal,
+                (flags & 1 ? 2 | 8 : 2 | 8 | 16) | (flags & 4 ? 1 : 0), 0, 0, xdim - 1, ydim - 1);
+        return;
+    }
+#endif
     if (shade < 0)
         shade = 0;
     if (shade >= numpalookups)
@@ -2540,6 +2712,13 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
         return;
     if (picanm[picnum] & 0xC0)
         picnum = (short)(picnum + animateoffs(picnum));
+#ifdef POLYMOST
+    /* Screen coordinates, clipped to the view window. */
+    if (rendmode) {
+        polymost_dorotatesprite(sx, sy, z, a, picnum, 0, 0, 2 | 8, windowx1, windowy1, windowx2, windowy2);
+        return;
+    }
+#endif
     xs = tilesizx[picnum];
     ys = tilesizy[picnum];
     half = (int)(((long long)(xs + ys) * z) >> 1);

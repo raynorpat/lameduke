@@ -26,6 +26,7 @@ int game_skill;
 int game_level_set;
 int game_quotes;
 int game_debug;
+int game_renderer_arg = -1;
 int user_visibility = 13; /* byte_1257A8, from userdefs.tmp (13 without one) */
 
 int check_file_id(void)
@@ -50,6 +51,7 @@ static void show_help(const char *argv0)
     puts("\t/d        Activate DEBUG MODEs.");
     puts("\t/r        Record a demo.");
     puts("\t/oDIR     Reroute game output to DIR.");
+    puts("\t/p#       Renderer # (0 classic, 1 solid, 2 Polymost, 3 OpenGL).");
     puts("\t/e        Encode maps...");
 }
 
@@ -102,6 +104,10 @@ void check_args(int argc, char **argv)
             /* The path goes to byte_8EE78, which nothing reads. */
             printf("I/O path rerouted to %s.\n", arg + 2);
             break;
+        case 'p':
+            /* Not in the exe: the renderer for this run, never saved. */
+            game_renderer_arg = atoi(arg + 2);
+            break;
         case 'q':
             game_quotes = 1;
             break;
@@ -121,6 +127,9 @@ void check_args(int argc, char **argv)
             exit(0);
         }
     }
+    if (game_renderer_arg >= 0
+        && setrendermode(game_renderer_arg) != (game_renderer_arg > 3 ? 3 : game_renderer_arg))
+        puts("OpenGL renderer unavailable; using the classic renderer.");
 }
 
 /* 0x2F190. A lift (SE 17) placed with shade over 16 sets every other lift

@@ -668,7 +668,7 @@ static void polymost_drawalls (int32_t bunch)
 
 
 		globalpicnum = sec->floorpicnum; globalshade = sec->floorshade; globalpal = (int32_t)((unsigned char)sec->floorpal);
-		globalorientation = sec->floorstat;
+		globalorientation = sec->floorstat&~2; //no slopes: bit 2 is a heightmap, drawn flat
 		if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,sectnum);
 		if (!(globalorientation&1))
 		{
@@ -834,7 +834,7 @@ static void polymost_drawalls (int32_t bunch)
 		}
 
 		globalpicnum = sec->ceilingpicnum; globalshade = sec->ceilingshade; globalpal = (int32_t)((unsigned char)sec->ceilingpal);
-		globalorientation = sec->ceilingstat;
+		globalorientation = sec->ceilingstat&~2;
 		if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,sectnum);
 		if (!(globalorientation&1))
 		{
@@ -1047,7 +1047,7 @@ static void polymost_drawalls (int32_t bunch)
 
 			if (((cy0 < ocy0) || (cy1 < ocy1)) && (!((sec->ceilingstat&sector[nextsectnum].ceilingstat)&1)))
 			{
-				globalpicnum = wal->picnum; globalshade = wal->shade; globalpal = (int32_t)((unsigned char)wal->pal);
+				globalpicnum = wal->picnum; globalshade = wal->shade; globalpal = 0;
 				if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 				if (!(wal->cstat&4)) i = sector[nextsectnum].ceilingz; else i = sec->ceilingz;
@@ -1083,7 +1083,7 @@ static void polymost_drawalls (int32_t bunch)
 					gux += (float)(nwal->xpanning-wal->xpanning)*gdx;
 					guy += (float)(nwal->xpanning-wal->xpanning)*gdy;
 				}
-				globalpicnum = nwal->picnum; globalshade = nwal->shade; globalpal = (int32_t)((unsigned char)nwal->pal);
+				globalpicnum = nwal->picnum; globalshade = nwal->shade; globalpal = 0;
 				if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 				if (!(nwal->cstat&4)) i = sector[nextsectnum].floorz; else i = sec->ceilingz;
@@ -1114,7 +1114,7 @@ static void polymost_drawalls (int32_t bunch)
 		if ((nextsectnum < 0) || (wal->cstat&32))   //White/1-way wall
 		{
 			if (nextsectnum < 0) globalpicnum = wal->picnum; else globalpicnum = wal->overpicnum;
-			globalshade = wal->shade; globalpal = (int32_t)((unsigned char)wal->pal);
+			globalshade = wal->shade; globalpal = 0;
 			if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,wallnum+16384);
 
 			if (nextsectnum >= 0) { if (!(wal->cstat&4)) i = nextsec->ceilingz; else i = sec->ceilingz; }
@@ -1182,33 +1182,17 @@ static void polymost_scansector (int32_t sectnum)
 {
 	double d, xp1, yp1, xp2, yp2;
 	walltype *wal, *wal2;
-	spritetype *spr;
 	int32_t z, zz, startwall, endwall, numscansbefore, scanfirst, bunchfrst, nextsectnum;
-	int32_t xs, ys, x1, y1, x2, y2;
+	int32_t x1, y1, x2, y2;
 
 	if (sectnum < 0) return;
-	if (automapping) show2dsector[sectnum>>3] |= pow2char[sectnum&7];
 
 	sectorborder[0] = sectnum, sectorbordercnt = 1;
 	do
 	{
 		sectnum = sectorborder[--sectorbordercnt];
 
-		for(z=headspritesect[sectnum];z>=0;z=nextspritesect[z])
-		{
-			spr = &sprite[z];
-			if ((((spr->cstat&0x8000) == 0) || (showinvisibility)) &&
-				  (spr->xrepeat > 0) && (spr->yrepeat > 0) &&
-				  (spritesortcnt < MAXSPRITESONSCREEN))
-			{
-				xs = spr->x-globalposx; ys = spr->y-globalposy;
-				if ((spr->cstat&48) || (xs*gcosang+ys*gsinang > 0))
-				{
-					copybufbyte(spr,&tsprite[spritesortcnt],sizeof(spritetype));
-					tsprite[spritesortcnt++].owner = z;
-				}
-			}
-		}
+		scansprites(sectnum);
 
 		gotsector[sectnum>>3] |= pow2char[sectnum&7];
 
@@ -1302,16 +1286,12 @@ void polymost_drawrooms ()
 	gviewxrange = ((double)viewingrange)*((double)xdimen)/(32768.0*1024.0);
 	gcosang = ((double)cosglobalang)/262144.0;
 	gsinang = ((double)singlobalang)/262144.0;
-    if (viewyawfraction) {
-        gcosang = cos(renderangle * (3.14159265358979323846 / 1024.0)) / 16.0;
-        gsinang = sin(renderangle * (3.14159265358979323846 / 1024.0)) / 16.0;
-    }
 	gcosang2 = gcosang*((double)viewingrange)/65536.0;
 	gsinang2 = gsinang*((double)viewingrange)/65536.0;
 	ghalfx = (double)halfxdimen; grhalfxdown10 = 1.0/(((double)ghalfx)*1024);
 	/* Pitch and roll use the focal length, independent of viewport width. */
 	gfocalx = ghalfx*65536.0/(double)viewingrange;
-	ghoriz = viewhorizonfraction ? renderhorizon : (double)globalhoriz;
+	ghoriz = (double)(globalhoriz-startumost[0]); //draw.c's horizon row counts from the 200-row screen's
 
 		//global cos/sin height angle
 	r = (double)((ydimen>>1)-ghoriz);
@@ -1391,10 +1371,8 @@ void polymost_drawrooms ()
 		vy = ox2*((float)singlobalang) + oy2*((float)cosglobalang);
 		vz = oz2*16384.0;
 
-		hitallsprites = 1;
 		hitscan(globalposx,globalposy,globalposz,globalcursectnum, //Start position
-			vx>>12,vy>>12,vz>>8,&hitsect,&hitwall,&hitsprite,&hitx,&hity,&hitz,0xffff0030);
-		hitallsprites = 0;
+			vx>>12,vy>>12,vz>>8,&hitsect,&hitwall,&hitsprite,&hitx,&hity,&hitz);
 
 		searchsector = hitsect;
 		if (hitwall >= 0)
@@ -1508,7 +1486,7 @@ void polymost_drawmaskwall (int32_t damaskwallcnt)
 	globalpicnum = wal->overpicnum; if ((uint32_t)globalpicnum >= MAXTILES) globalpicnum = 0;
 	if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,(short)thewall[z]+16384);
 	globalshade = (int32_t)wal->shade;
-	globalpal = (int32_t)((unsigned char)wal->pal);
+	globalpal = 0;
 	globalorientation = (int32_t)wal->cstat;
 
 	sx0 = (float)(wal->x-globalposx); sx1 = (float)(wal2->x-globalposx);
@@ -1681,7 +1659,6 @@ static float polymost_wallcross (float ax, float ay, float bx, float by, float y
 	//   (facing the eye, it behind, an end nearer; a red wall only with a step,
 	//   up or down, as its sector's floor or ceiling edge hides what's past it) so
 	//   that those still hide it; yp if it needn't or can't come nearer.
-static int spritewallfront (spritetype *s, int32_t w);
 static float polymost_spritenear (spritetype *tspr, float yp, float xl, float xr)
 {
 	float a[4], d, nearest = yp;
@@ -1703,7 +1680,7 @@ static float polymost_spritenear (spritetype *tspr, float yp, float xl, float xr
 			}
 			for(w=sector[sect].wallptr,endw=w+sector[sect].wallnum;w<endw;w++)
 			{
-				if (spritewallfront(tspr,w) == pass) continue;
+				if (spritewallfront(tspr->owner,w) == pass) continue;
 				if ((pass) && (wall[w].nextsector >= 0) &&
 					 (sector[wall[w].nextsector].floorz == sector[sect].floorz) &&
 					 (sector[wall[w].nextsector].ceilingz == sector[sect].ceilingz) &&
@@ -1750,18 +1727,20 @@ void polymost_drawsprite (int32_t snum)
 	float f, r, c, s, fx, fy, sx0, sy0, sx1, sy1, xp0, yp0, xp1, yp1, oxp0, oyp0, ryp0, ryp1, ft[4];
 	float x0, y0, x1, y1, sc0, sf0, sc1, sf1, px2[6], py2[6], xv, yv, t0, t1, fogshades = 0.f;
 	int32_t i, j, spritenum, xoff, yoff, method, npoints, nearer;
-	spritetype *tspr;
+	spritetype tsprcopy, *tspr;
 
-	tspr = tspriteptr[snum];
-	globalpicnum      = tspr->picnum;
+		//The sorted list holds sprite numbers and the tiles animatesprites picked
+	tsprcopy = sprite[tspritelist[snum]]; tsprcopy.owner = tspritelist[snum];
+	tspr = &tsprcopy;
+	globalpicnum      = tspritepicnum[snum];
 	globalshade       = tspr->shade;
-	globalpal         = tspr->pal;
+	globalpal         = 0;
 	globalorientation = tspr->cstat;
 	spritenum         = tspr->owner;
 	if (picanm[globalpicnum]&192) globalpicnum += animateoffs(globalpicnum,spritenum+32768);
 
-	xoff = (int32_t)((signed char)((picanm[globalpicnum]>>8)&255))+((int32_t)tspr->xoffset);
-	yoff = (int32_t)((signed char)((picanm[globalpicnum]>>16)&255))+((int32_t)tspr->yoffset);
+	xoff = (int32_t)((signed char)((picanm[globalpicnum]>>8)&255));
+	yoff = (int32_t)((signed char)((picanm[globalpicnum]>>16)&255));
 
 	method = 1+4;
 	if (tspr->cstat&2) { if (!(tspr->cstat&512)) method = 2+4; else method = 3+4; }

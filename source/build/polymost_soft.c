@@ -49,7 +49,7 @@ void drawline2d (float x0, float y0, float x1, float y1, char col)
 		x = (int32_t)(x0+.5); if (x < 0) { y -= inc*x; x = 0; } //if for safety
 		e = (int32_t)(x1+.5); if (e > xdimen) e = xdimen;       //if for safety
 		up16 = (ydimen<<16);
-		for(;x<e;x++,y+=inc) if ((uint32_t)y < up16) *(char *)(ylookup[y>>16]+x+frameoffset) = col;
+		for(;x<e;x++,y+=inc) if ((uint32_t)y < up16) *(char *)((y>>16)*bytesperline+x+frameoffset) = col;
 	}
 	else
 	{
@@ -59,7 +59,7 @@ void drawline2d (float x0, float y0, float x1, float y1, char col)
 		y = (int32_t)(y0+.5); if (y < 0) { x -= inc*y; y = 0; } //if for safety
 		e = (int32_t)(y1+.5); if (e > ydimen) e = ydimen;       //if for safety
 		up16 = (xdimen<<16);
-		for(;y<e;y++,x+=inc) if ((uint32_t)x < up16) *(char *)(ylookup[y]+(x>>16)+frameoffset) = col;
+		for(;y<e;y++,x+=inc) if ((uint32_t)x < up16) *(char *)(y*bytesperline+(x>>16)+frameoffset) = col;
 	}
 }
 
@@ -218,10 +218,10 @@ static void polymost_soft_drawpoly(const polymost_polygon *poly)
 				if (ix0 < ix1)
 				{
 					if (rendmode == 1)
-						memset((void *)(ylookup[y]+ix0+frameoffset),dacol,ix1-ix0);
+						memset((void *)(y*bytesperline+ix0+frameoffset),dacol,ix1-ix0);
 					else
 					{
-						vidp = (char *)(ylookup[y]+frameoffset+ix0);
+						vidp = (char *)(y*bytesperline+frameoffset+ix0);
 						dp = ngdx*(double)ix0 + ngdy*(double)y + ngdo;
 						up = ngux*(double)ix0 + nguy*(double)y + nguo;
 						vp = ngvx*(double)ix0 + ngvy*(double)y + ngvo;
