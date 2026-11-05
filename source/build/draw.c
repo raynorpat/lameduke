@@ -13,6 +13,7 @@
 #include "sdl_window.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -57,6 +58,9 @@ static short globalpicnum, globalshiftval;
 static unsigned char *globalbufplc;
 static int globalx1, globaly1, globalx2, globaly2, globalzx; /* 0x23C370..0x23C394 */
 static unsigned char xshift, yshift;  /* byte_23DE9B, byte_23DE9A */
+
+static void glview_begin(void);
+static void glview_end(void);
 
 /* Column arrays. */
 static int startumost[MAXXDIM], startdmost[MAXXDIM];
@@ -1508,7 +1512,9 @@ void drawrooms(int daposx, int daposy, int daposz, short daang, int dahoriz, sho
     smostcnt = 0;
 #ifdef POLYMOST
     if (rendmode) {
+        glview_begin();
         polymost_drawrooms();
+        glview_end();
         return;
     }
 #endif
@@ -1645,7 +1651,9 @@ static void drawmaskwall(short damaskwallcnt)
 
 #ifdef POLYMOST
     if (rendmode) {
+        glview_begin();
         polymost_drawmaskwall(damaskwallcnt);
+        glview_end();
         return;
     }
 #endif
@@ -2372,9 +2380,14 @@ int setrendermode(int renderer)
         renderer = 0;
     if (renderer > 3)
         renderer = 3;
-    /* shortcut: this build has no OpenGL renderer yet, so 3 is classic. */
+#ifdef USE_OPENGL
+    /* Renderer 3 draws in setgamemode_gl's window. */
+    if (renderer == 3 && !getvideoglpath())
+        renderer = 0;
+#else
     if (renderer == 3)
         renderer = 0;
+#endif
     rendmode = renderer;
 #endif
     return rendmode;
@@ -2412,6 +2425,8 @@ int getrendermode(void)
 #define animateoffs(pic, obj) animateoffs(pic)
 #define begindrawing()
 #define enddrawing()
+#undef min /* the C library's, if it has them */
+#undef max
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define mulscale16(a, b) mulscale(a, b, 16)
@@ -2458,8 +2473,80 @@ static int polymost_wallfront(int l1, int l2)
 }
 #define wallfront polymost_wallfront
 
-#undef USE_OPENGL /* shortcut: no OpenGL backend until the GL window exists */
+#ifdef USE_OPENGL
+/* What duke3d's engine.c and display.c give the GL backend. This engine has
+   no palette fades: the fade is none, and the palette shown is palette[]
+   (polymost_glpalette copies it in). Its sky has no distance shade. */
+#define MAXPALOOKUPS 256
+typedef struct { unsigned char r, g, b, f; } palette_t;
+static palette_t curpalette[256];
+static palette_t palfadergb;
+#define palfadedelta 0
+static const unsigned char britable[1][64];
+#define curbrightness 0
+#define globalpisibility 0
+#define mulscale4(a, b) mulscale(a, b, 4)
+/* The editor's tile screen and the red-blue mode only. */
+#define qsetmode 200
+#define numpages 2
+/* polymost_fillpolygon's, for duke3d's 2D map: this one draws its own. */
+static int asm1, asm2, globalpolytype;
+void setpolymost2dview(void);
+#endif
+
 #include "polymost.c"
+
+#ifdef USE_OPENGL
+/* palette[] into curpalette; the 1.1 and 1.5 paths' textures hold its
+   colours, so a change remakes them (duke3d's VBE_setPalette). */
+static void polymost_glpalette(void)
+{
+    int i, changed = 0;
+
+    for (i = 0; i < 256; i++) {
+        palette_t c = { palette[i * 3], palette[i * 3 + 1], palette[i * 3 + 2], 0 };
+
+        if (memcmp(&c, &curpalette[i], sizeof c)) {
+            curpalette[i] = c;
+            changed = 1;
+        }
+    }
+    if (changed && gldrawpath != GLPATH_SHADER) {
+        gltexinvalidateall();
+        polymost_buildshaderamp();
+    }
+}
+
+/* The palette on screen, for the 2.1 path's present. */
+void getfadedpalette(palette_t *pal)
+{
+    polymost_glpalette();
+    memcpy(pal, curpalette, sizeof curpalette);
+}
+
+/* duke3d's engine.c: OpenGL set up for 2D drawing in drawable pixels. */
+void setpolymost2dview(void)
+{
+    if (rendmode < 3)
+        return;
+    polymost_shaderdraw(0); /* GL 2.1: into the frame's indices, after the 3D view */
+    if (gloy1 != -1) {
+        glViewport(0, 0, xres, yres);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, xres, yres, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+    }
+    gloy1 = -1;
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_BLEND);
+    glDisable(GL_FOG); /* resizeglcheck turns it on again for 3D */
+    fog_is_on = 0;
+    _glframedrawn();
+}
+#endif
 
 #undef xdimenscale
 #undef viewingrange
@@ -2488,12 +2575,59 @@ static int polymost_wallfront(int l1, int l2)
 #undef divscale16
 #undef divscale32
 #endif
+/* Renderer 3 draws at xres by yres. While Polymost draws, it sees the
+   screen, the view window and the horizon at that size, as duke3d's engine
+   gives them; glviewscale is the view's width over the 320-wide one's. */
+static double glviewscale = 1.0;
+static int glsaved[9];
+
+static void glview_begin(void)
+{
+#ifdef USE_OPENGL
+    int *v[9] = { &xdim, &ydim, &windowx1, &windowy1, &windowx2, &windowy2, &xdimen, &ydimen, &globalhoriz };
+    int i;
+
+    if (rendmode != 3)
+        return;
+    for (i = 0; i < 9; i++)
+        glsaved[i] = *v[i];
+    polymost_glpalette();
+    xdim = xres;
+    ydim = yres;
+    windowx1 = glsaved[2] * xres / 320;
+    windowy1 = glsaved[3] * yres / 200;
+    windowx2 = (glsaved[4] + 1) * xres / 320 - 1;
+    windowy2 = (glsaved[5] + 1) * yres / 200 - 1;
+    xdimen = windowx2 - windowx1 + 1;
+    ydimen = windowy2 - windowy1 + 1;
+    glviewscale = (double)xdimen / glsaved[6];
+    /* draw.c's horizon is a 200-row screen's, its offset from row 100 scaled
+       by the view's width over 320, as duke3d's by xdimenscale */
+    globalhoriz = startumost[0] + (int)((glsaved[8] - 100) * glviewscale) + (ydimen >> 1);
+#endif
+}
+
+static void glview_end(void)
+{
+#ifdef USE_OPENGL
+    int *v[9] = { &xdim, &ydim, &windowx1, &windowy1, &windowx2, &windowy2, &xdimen, &ydimen, &globalhoriz };
+    int i;
+
+    if (rendmode != 3)
+        return;
+    for (i = 0; i < 9; i++)
+        *v[i] = glsaved[i];
+#endif
+}
+
 /* Polymost takes the sorted list's index, classic the entry's fields. */
 static void drawtsprite(int i)
 {
 #ifdef POLYMOST
     if (rendmode) {
+        glview_begin();
         polymost_drawsprite(i);
+        glview_end();
         return;
     }
 #endif
@@ -2541,7 +2675,8 @@ void drawmasks(void)
 
 #ifdef POLYMOST
                 if (rendmode)
-                    over = dxb1[mw] <= spritesx[i] / 256.0 && spritesx[i] / 256.0 <= dxb2[mw];
+                    over = dxb1[mw] <= spritesx[i] * glviewscale / 256.0
+                        && spritesx[i] * glviewscale / 256.0 <= dxb2[mw];
                 else
 #endif
                     over = xs >= xb1[mw] && xs <= xb2[mw];
@@ -2618,12 +2753,14 @@ void rotatesprite(int sx, int sy, short picnum, signed char shade, unsigned char
        centres on the picanm offsets (Polymost's 16 is the top-left corner)
        and 4 is translucent. */
     if (rendmode) {
+        glview_begin();
         if (flags & 2)
             polymost_dorotatesprite(sx << 16, sy << 16, 65536, 0, picnum, shade, pal,
                 (flags & 1 ? 2 : 2 | 16) | (flags & 4 ? 1 : 0), windowx1, windowy1, windowx2, windowy2);
         else
             polymost_dorotatesprite(sx << 16, sy << 16, 65536, 0, picnum, shade, pal,
                 (flags & 1 ? 2 | 8 : 2 | 8 | 16) | (flags & 4 ? 1 : 0), 0, 0, xdim - 1, ydim - 1);
+        glview_end();
         return;
     }
 #endif
@@ -2720,7 +2857,9 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
 #ifdef POLYMOST
     /* Screen coordinates, clipped to the view window. */
     if (rendmode) {
+        glview_begin();
         polymost_dorotatesprite(sx, sy, z, a, picnum, 0, 0, 2 | 8, windowx1, windowy1, windowx2, windowy2);
+        glview_end();
         return;
     }
 #endif

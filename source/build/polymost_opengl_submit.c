@@ -4,7 +4,7 @@
 #ifdef USE_OPENGL
 #include <stddef.h>
 #include <stdint.h>
-#include "build.h"
+#include "sdl_window.h"
 #include "sdl_opengl_internal.h"
 #include "polymost_opengl_submit.h"
 

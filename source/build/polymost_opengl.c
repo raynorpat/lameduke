@@ -273,17 +273,16 @@ static float polymost_shaderamp (int32_t picnum, int32_t shade, float *zero)
 	return(glshaderamp[min(max(shade,0),glshaderampn-1)]);
 }
 
-	//Classic's distance shading (getpalookup with drawsprite's swall and globvis)
-	//   adds (depth*viewingrange*xdimscale*globvis)>>51 shades, depth in map units,
-	//   globvis = globalvisibility*(uchar)(vis+16)/16. Polymost's eye z is
+	//This engine's classic shading (draw.c's wallscan) adds depth>>(visibility-3)
+	//   shades, depth in map units, with no sector visibility. Polymost's eye z is
 	//   depth*viewingrange/(gxyaspect*gyxscale*2^30), so per unit of eye z it adds:
 static float glfogshades = 0.f;
 static float glfogstart = 0.f, glfogend = 1.f; //what GL has
 
 static void polymost_fogvis (int32_t vis)
 {
-	glfogshades = (float)(gxyaspect*gyxscale*((double)xdimscale)*((double)globalvisibility)*
-		((double)((unsigned char)(vis+16)))/(16.0*2097152.0));
+	(void)vis;
+	glfogshades = (float)(gxyaspect*gyxscale*1073741824.0/((double)viewingrange*ldexp(1.0,visibility-3)));
 }
 
 	//Fogs a surface of a shade as classic darkens it, over its polymost_shaderamp

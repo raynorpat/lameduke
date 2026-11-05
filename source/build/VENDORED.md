@@ -95,8 +95,11 @@ every local change. `draw.c` includes `polymost.c` (as duke3d's `engine.c`
 does) when CMake's `LAMEDUKE_POLYMOST` is on, and its `drawrooms`,
 `drawmaskwall`, `drawmasks`, `rotatesprite` and `rotatescalesprite` call
 Polymost when `rendmode` is not 0. `/p#` picks the renderer: 1 solid colour,
-2 software. Renderer 3 (OpenGL) is not built yet: `polymost.c` is compiled
-without `USE_OPENGL`, and `setrendermode(3)` gives the classic renderer.
+2 software, 3 OpenGL. `polymost.c` gets `USE_OPENGL` (and so
+`polymost_opengl.c`) when CMake's `LAMEDUKE_OPENGL` and `LAMEDUKE_POLYMOST`
+are both on, which also builds `sdl_opengl.c` and `polymost_opengl_submit.c`.
+Otherwise, or when the GL window can't be made, `setrendermode(3)` gives the
+classic renderer.
 
 Local changes, in `polymost.c` and `polymost_soft.c`:
 
@@ -139,6 +142,44 @@ Known drift from classic in renderers 1 and 2: Polymost's software path has
 no distance shading (upstream), and `rotatescalesprite` centres on the tile's
 picanm offsets plus half its size where classic centres on its middle (the
 same for tiles with no offsets).
+
+Renderer 3, local changes for the OpenGL backend:
+
+- `sdl_window.c` is this engine's, with duke3d's GL window and context
+  ported into it: `setgamemode_gl`, the draw paths through
+  `gl_initdrawpath`, the shader path's present and supersampling, the last
+  frame for `glredrawlastframe`, and the 8-bit frame shown through the GL
+  context (4:3, black bars) once there is one. The context is made once and
+  kept until shutdown. Display modes are 0 windowed, 1 fullscreen, 2
+  borderless (duke3d numbers them otherwise); the SDL_Renderer path keeps
+  4:3 in full screen. `LAMEDUKE_GL_FORCEFAIL` set makes the context fail
+  (duke3d's `gl_forcefail` 4). Left out: duke3d's internal size, brightness,
+  fades around a change, the overlay, Alt+Enter, the mode-list cleanup and
+  screenshots. `platform_capture` reads renderer 3's frame for
+  `LAMEDUKE_FRAME`.
+- `sdl_opengl.c` and `polymost_opengl_submit.c` include `sdl_window.h`
+  (`glinfo`, `xres`, `yres`) instead of duke3d's `build.h`.
+- `draw.c` gives the GL backend `palette_t` and `curpalette`, copied from
+  `palette[]` as Polymost draws (the 1.1/1.5 textures remade on a change,
+  as duke3d's `VBE_setPalette` does), `getfadedpalette`, `setpolymost2dview`
+  (from duke3d's `engine.c`) and `MAXPALOOKUPS`. This engine has no palette
+  fades, so `palfadedelta` is 0, and its sky no distance shade
+  (`globalpisibility` 0). `asm1`, `asm2` and `globalpolytype` exist only for
+  `polymost_fillpolygon`, which nothing calls.
+- While Polymost draws in renderer 3 (`glview_begin`/`glview_end` around
+  each call), `xdim`/`ydim` are `xres`/`yres` and the view window is scaled
+  from 320x200 to that size. The horizon is `draw.c`'s offset from row 100
+  scaled by the view's width over 320, as duke3d's by `xdimenscale`. The
+  aspect is duke3d's without `widescreen`: square pixels, so at 16:9 the 4:3
+  view loses rows at the top and bottom (Hor+ is to come). `drawmasks`
+  scales `spritesx` to compare it with Polymost's `dxb1`/`dxb2`.
+- `polymost_fogvis` shades at this engine's classic wall rate
+  (`depth>>(visibility-3)` shades, `draw.c`'s `wallscan`) instead of
+  duke3d's `globalvisibility` and sector visibility, which the 1994 engine
+  doesn't have. Sprites shade at that rate too, half classic's.
+- The HUD and 2D drawn with `rotatesprite` come out through Polymost at the
+  window's size; text, fills and anything else the game draws into the 8-bit
+  frame aren't shown in renderer 3 yet.
 
 `source/build/math.h` is now `buildmath.h`: with `source/build` on the
 include path, MSVC found it for `polymost.c`'s `<math.h>`.

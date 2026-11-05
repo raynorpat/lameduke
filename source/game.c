@@ -51,14 +51,21 @@ static void write_frame(const char *path)
 {
     FILE *fp;
     unsigned char hdr[54];
-    int x, y;
+    int x, y, w, h, row;
     const unsigned char *src = framebuffer();
-    int row = (xdim * 3 + 3) & ~3;
+    unsigned char *gl = platform_capture(&w, &h);
 
+    if (!gl) {
+        w = xdim;
+        h = ydim;
+    }
+    row = (w * 3 + 3) & ~3;
     fp = fopen(path, "wb");
-    if (!fp)
+    if (!fp) {
+        free(gl);
         return;
-    {
+    }
+    if (!gl) {
         int n = 0;
         int i;
         for (i = 0; i < xdim * ydim; i++)
@@ -71,26 +78,27 @@ static void write_frame(const char *path)
     hdr[1] = 'M';
     hdr[10] = 54;
     hdr[14] = 40;
-    hdr[18] = (unsigned char)xdim;
-    hdr[19] = (unsigned char)(xdim >> 8);
-    hdr[22] = (unsigned char)ydim;
-    hdr[23] = (unsigned char)(ydim >> 8);
+    hdr[18] = (unsigned char)w;
+    hdr[19] = (unsigned char)(w >> 8);
+    hdr[22] = (unsigned char)h;
+    hdr[23] = (unsigned char)(h >> 8);
     hdr[26] = 1;
     hdr[28] = 24;
     fwrite(hdr, 1, 54, fp);
-    for (y = ydim - 1; y >= 0; y--) {
-        for (x = 0; x < xdim; x++) {
-            int c = src[y * xdim + x] * 3;
-            unsigned char rgb[3];
-            rgb[0] = palette[c + 2];
-            rgb[1] = palette[c + 1];
-            rgb[2] = palette[c];
-            fwrite(rgb, 1, 3, fp);
+    for (y = h - 1; y >= 0; y--) {
+        for (x = 0; x < w; x++) {
+            const unsigned char *c = gl ? gl + (y * w + x) * 3 : palette + src[y * w + x] * 3;
+            unsigned char bgr[3];
+            bgr[0] = c[2];
+            bgr[1] = c[1];
+            bgr[2] = c[0];
+            fwrite(bgr, 1, 3, fp);
         }
-        if (row > xdim * 3)
-            fwrite("\0\0\0", 1, (size_t)(row - xdim * 3), fp);
+        if (row > w * 3)
+            fwrite("\0\0\0", 1, (size_t)(row - w * 3), fp);
     }
     fclose(fp);
+    free(gl);
 }
 
 static void present(void)
@@ -115,13 +123,14 @@ static void present(void)
             rotatesprite(268, 156, 481, 0, 4, 0);
     }
     pansounds();
-    platform_present(framebuffer(), xdim, ydim);
-    presented++;
-    /* Debug aid: dump the Nth frame (default 1), then exit. */
-    if (shot && shot[0] && presented >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
+    /* Debug aid: dump the Nth frame (default 1), then exit. Before it is
+       shown: renderer 3's is read from the back buffer. */
+    if (shot && shot[0] && presented + 1 >= (at && atoi(at) > 0 ? atoi(at) : 1)) {
         write_frame(shot);
         exit(0);
     }
+    platform_present(framebuffer(), xdim, ydim);
+    presented++;
 }
 
 /* totalclock's ticks in t/per seconds. main (0x15BE7) runs sub_102A0 at

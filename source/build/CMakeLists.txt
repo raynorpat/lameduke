@@ -34,9 +34,11 @@ endif()
 target_include_directories(buildengine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(buildengine PUBLIC lameduke_compile_options ${LAMEDUKE_SDL2_TARGET})
 
-if(LAMEDUKE_OPENGL)
+# Renderer 3 is Polymost's, so OpenGL needs it.
+if(LAMEDUKE_OPENGL AND LAMEDUKE_POLYMOST)
   find_package(OpenGL REQUIRED)
   target_compile_definitions(buildengine PUBLIC USE_OPENGL=1)
+  target_sources(buildengine PRIVATE sdl_opengl.c polymost_opengl_submit.c)
   if(APPLE)
     target_compile_definitions(buildengine PUBLIC GL_SILENCE_DEPRECATION)
   endif()

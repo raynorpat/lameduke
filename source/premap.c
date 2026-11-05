@@ -127,6 +127,9 @@ void check_args(int argc, char **argv)
             exit(0);
         }
     }
+    /* shortcut: renderer 3's window is 1280x720 until duke.cfg sets it */
+    if (game_renderer_arg >= 3)
+        setgamemode_gl(1280, 720);
     if (game_renderer_arg >= 0
         && setrendermode(game_renderer_arg) != (game_renderer_arg > 3 ? 3 : game_renderer_arg))
         puts(game_renderer_arg >= 3 ? "OpenGL renderer unavailable; using the classic renderer."

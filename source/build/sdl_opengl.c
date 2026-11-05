@@ -81,7 +81,7 @@ void gl_colorcorrect(unsigned char *c, double contrast, double saturation)
 
 #ifdef USE_OPENGL
 #include "SDL.h"
-#include "build.h"
+#include "sdl_window.h"
 
 PFNGLGENBUFFERSPROC bglGenBuffers;
 PFNGLDELETEBUFFERSPROC bglDeleteBuffers;
