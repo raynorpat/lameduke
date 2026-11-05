@@ -133,8 +133,8 @@ static void gl_present8(const unsigned char *src, int swap)
     framedrawn = 0;
     expand(src, tex_w * tex_h);
     SDL_GL_GetDrawableSize(window, &gl_draw_w, &gl_draw_h);
-    gl_fitrect(getrendermode() == 2 && !ydim16 ? tex_w : 4,
-               getrendermode() == 2 && !ydim16 ? tex_h : 3, gl_draw_w, gl_draw_h, r);
+    gl_fitrect(getrendermode() == 2 && (!ydim16 || !editstatus) ? tex_w : 4,
+               getrendermode() == 2 && (!ydim16 || !editstatus) ? tex_h : 3, gl_draw_w, gl_draw_h, r);
     glsub_flush();
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glMatrixMode(GL_TEXTURE);
@@ -326,7 +326,7 @@ static void fit_renderer(void)
 {
     if (renderer && tex_w)
         SDL_RenderSetLogicalSize(renderer, displaymode ? tex_w : 0,
-            displaymode ? (getrendermode() == 2 && !ydim16 ? tex_h : tex_w * 3 / 4) : 0);
+            displaymode ? (getrendermode() == 2 && (!ydim16 || !editstatus) ? tex_h : tex_w * 3 / 4) : 0);
 }
 
 /* Applies displaymode to the window. Fullscreen takes the display mode
@@ -366,7 +366,7 @@ int platform_video(int width, int height)
 #ifdef USE_OPENGL
     /* The GL window keeps its size; the 8-bit frame is scaled into it. */
     if (glcontext) {
-        if (getrendermode() == 2 && !ydim16) {
+        if (getrendermode() == 2 && (!ydim16 || !editstatus)) {
             SDL_SetWindowSize(window, width, height);
             gl_resvars();
         }
@@ -428,7 +428,7 @@ const char *platform_video_error(void)
 
 void platform_present(const void *pixels, int width, int height)
 {
-    if (getrendermode() == 2 && !ydim16) {
+    if (getrendermode() == 2 && (!ydim16 || !editstatus)) {
         pixels = framebuffer();
         width = renderwidth;
         height = renderheight;
@@ -465,7 +465,7 @@ unsigned char *platform_capture(int *w, int *h)
     int y, row;
 
     if (!glcontext) {
-        if (getrendermode() == 2 && !ydim16) {
+        if (getrendermode() == 2 && (!ydim16 || !editstatus)) {
             *w = renderwidth; *h = renderheight;
             buf = (unsigned char *)malloc((size_t)*w * *h * 3);
             if (!buf) return NULL;
@@ -483,7 +483,7 @@ unsigned char *platform_capture(int *w, int *h)
     } else {
         /* Exercise the same presentation path as the window, including after
            a mid-run switch. Reading framebuffer() would hide a blank window. */
-        if (getrendermode() == 2 && !ydim16 && (tex_w != renderwidth || tex_h != renderheight))
+        if (getrendermode() == 2 && (!ydim16 || !editstatus) && (tex_w != renderwidth || tex_h != renderheight))
             platform_video(renderwidth, renderheight);
         if (getrendermode() < 2 && (tex_w != xdim || tex_h != ydim))
             platform_video(xdim, ydim);

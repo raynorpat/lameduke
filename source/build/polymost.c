@@ -593,6 +593,35 @@ void domost (float x0, float y0, float x1, float y1)
 	}
 }
 
+/* The beta sky's distance shade changes by logical column. Split only at
+   shade-row transitions, keeping the same visibility edges and texture plane. */
+static void sky_domost(float x0, float y0, float x1, float y1)
+{
+#ifdef USE_OPENGL
+    if (rendmode == 3 && x0 != x1) {
+        float left = min(x0, x1), right = max(x0, x1), start = left;
+        float slope = (y1 - y0) / (x1 - x0);
+        int col, shade = globalshade;
+        int row = polymost_skyshade((int)left, xdimen);
+        for (col = (int)left + 1; col <= (int)ceil(right); col++) {
+            int next = polymost_skyshade(col, xdimen);
+            float end = min((float)col, right);
+            if (next == row && end < right) continue;
+            globalshade = shade + row;
+            if (x0 < x1)
+                domost(start, y0 + (start-x0)*slope, end, y0 + (end-x0)*slope);
+            else
+                domost(end, y0 + (end-x0)*slope, start, y0 + (start-x0)*slope);
+            start = end;
+            row = next;
+        }
+        globalshade = shade;
+        return;
+    }
+#endif
+    domost(x0, y0, x1, y1);
+}
+
 static void polymost_scansector (int32_t sectnum);
 
 /*
@@ -777,7 +806,7 @@ static void polymost_drawalls (int32_t bunch)
 				//Parallaxing sky... hacked for Ken's mountain texture; paper-sky only :/
 			domostlayers = 0;
 #ifdef USE_OPENGL
-	polymost_gl_beginsky(sec->visibility);
+	polymost_gl_beginsky();
 #endif
 			if (1) //parallaxtype == 0)
 			{
@@ -794,7 +823,7 @@ static void polymost_drawalls (int32_t bunch)
 				gux = 0; guy = 0; guo = 0;
 				gvx = 0; gvy = (double)(tilesizy[globalpicnum]-1)*gdy; gvo = (double)(tilesizy[globalpicnum-1])*gdo;
 				oy = (((double)tilesizy[globalpicnum])*dd[0]-vv[0])/vv[1];
-				if ((oy > fy0) && (oy > fy1)) domost(x0,oy,x1,oy);
+				if ((oy > fy0) && (oy > fy1)) sky_domost(x0,oy,x1,oy);
 				else if ((oy > fy0) != (oy > fy1))
 				{     //  fy0                      fy1
 						//     \                    /
@@ -802,9 +831,9 @@ static void polymost_drawalls (int32_t bunch)
 						//        \              /
 						//         fy1        fy0
 					ox = (oy-fy0)*(x1-x0)/(fy1-fy0) + x0;
-					if (oy > fy0) { domost(x0,oy,ox,oy); domost(ox,oy,x1,fy1); }
-							  else { domost(x0,fy0,ox,oy); domost(ox,oy,x1,oy); }
-				} else domost(x0,fy0,x1,fy1);
+					if (oy > fy0) { sky_domost(x0,oy,ox,oy); sky_domost(ox,oy,x1,fy1); }
+							  else { sky_domost(x0,fy0,ox,oy); sky_domost(ox,oy,x1,oy); }
+				} else sky_domost(x0,fy0,x1,fy1);
 
 
 				gdx = 0; gdy = 0; gdo = dd[0];
@@ -825,7 +854,7 @@ static void polymost_drawalls (int32_t bunch)
 					ox = fx; fx = ((double)((y<<(11-pskybits))-globalang))*oz+ghalfx;
 					if (fx > x1) { fx = x1; i = -1; }
 
-					pow2xsplit = 0; domost(ox,(ox-x0)*r+fy0,fx,(fx-x0)*r+fy0); //flor
+					pow2xsplit = 0; sky_domost(ox,(ox-x0)*r+fy0,fx,(fx-x0)*r+fy0); //flor
 				} while (i >= 0);
 
 			}
@@ -940,7 +969,7 @@ static void polymost_drawalls (int32_t bunch)
 		{
 			domostlayers = 0;
 #ifdef USE_OPENGL
-	polymost_gl_beginsky(sec->visibility);
+	polymost_gl_beginsky();
 #endif
 				//Parallaxing sky... hacked for Ken's mountain texture; paper-sky only :/
 			if (1) //parallaxtype == 0)
@@ -957,7 +986,7 @@ static void polymost_drawalls (int32_t bunch)
 				gux = 0; guy = 0; guo = 0;
 				gvx = 0; gvy = 0; gvo = 0;
 				oy = -vv[0]/vv[1];
-				if ((oy < cy0) && (oy < cy1)) domost(x1,oy,x0,oy);
+				if ((oy < cy0) && (oy < cy1)) sky_domost(x1,oy,x0,oy);
 				else if ((oy < cy0) != (oy < cy1))
 				{     //         cy1        cy0
 						//        /             \
@@ -965,9 +994,9 @@ static void polymost_drawalls (int32_t bunch)
 						//    /                    \
 						//  cy0                     cy1
 					ox = (oy-cy0)*(x1-x0)/(cy1-cy0) + x0;
-					if (oy < cy0) { domost(ox,oy,x0,oy); domost(x1,cy1,ox,oy); }
-								else { domost(ox,oy,x0,cy0); domost(x1,oy,ox,oy); }
-				} else domost(x1,cy1,x0,cy0);
+					if (oy < cy0) { sky_domost(ox,oy,x0,oy); sky_domost(x1,cy1,ox,oy); }
+								else { sky_domost(ox,oy,x0,cy0); sky_domost(x1,oy,ox,oy); }
+				} else sky_domost(x1,cy1,x0,cy0);
 
 
 				gdx = 0; gdy = 0; gdo = dd[0];
@@ -987,7 +1016,7 @@ static void polymost_drawalls (int32_t bunch)
 					y++;
 					ox = fx; fx = ((double)((y<<(11-pskybits))-globalang))*oz+ghalfx;
 					if (fx > x1) { fx = x1; i = -1; }
-					pow2xsplit = 0; domost(fx,(fx-x0)*r+cy0,ox,(ox-x0)*r+cy0); //ceil
+					pow2xsplit = 0; sky_domost(fx,(fx-x0)*r+cy0,ox,(ox-x0)*r+cy0); //ceil
 				} while (i >= 0);
 			}
 #ifdef USE_OPENGL

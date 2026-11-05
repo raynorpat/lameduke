@@ -37,7 +37,7 @@ a comparison point, not an asserted ancestor of the code here.
 | `board.c`, `board.h` | Version-5 map loading, packed sector/wall/sprite records, sprite lists, collision and spatial queries. The records are 37, 35 and 38 bytes, respectively, as read by this beta. |
 | `draw.c`, `draw.h` | The classic software room and mask drawers and `rotatesprite`, reconstructed from the executable. They replace the earlier portal approximation. |
 | `display.c`, `display.h` | Palette and lookup loading, display mode and view setup. |
-| `tiles.c`, `tiles.h` | Loose `TILES000.ART`–`TILES007.ART` tile loading and access. |
+| `tiles.c`, `tiles.h` | Loose `TILES000.ART`â€“`TILES007.ART` tile loading and access. |
 | `math.c`, `buildmath.h` | Sine-table loading and engine math helpers. |
 | `cache.c`, `cache1d.h` | Cache interface used by this rebuild. |
 | `engine.c`, `engine.h` | Engine initialization and reading the original `SETUP.DAT` bytes. |
@@ -55,8 +55,9 @@ The game reads the original loose files rather than a GRP archive.
 [raynorpat/duke3d](https://github.com/raynorpat/duke3d) at
 `2f141cac5a0d2106780dff15fc2e2b8757618bfc` (`source/build/`): Ken Silverman's
 editor under [BUILDLIC.TXT](BUILDLIC.TXT), with icculus's and duke3d's changes.
-The Polymost files below are also taken from that tree. Commit `8035cc7` holds them
-unchanged, so `git diff 8035cc7 -- source/editor/build.c source/editor/bstub.h`
+The Polymost files below come from the same repository at their separately
+listed revision. Commit `8035cc7` holds the two editor files unchanged, so
+`git diff 8035cc7 -- source/editor/build.c source/editor/bstub.h`
 shows every local change. In summary:
 
 - The 1996 engine headers are replaced by `source/editor/editor.h`, which sits
@@ -170,8 +171,7 @@ Renderer 3, local changes for the OpenGL backend:
   `palette[]` as Polymost draws (the 1.1/1.5 textures remade on a change,
   as duke3d's `VBE_setPalette` does), `getfadedpalette`, `setpolymost2dview`
   (from duke3d's `engine.c`) and `MAXPALOOKUPS`. This engine has no palette
-  fades, so `palfadedelta` is 0, and its sky no distance shade
-  (`globalpisibility` 0). `asm1`, `asm2` and `globalpolytype` exist only for
+  fades, so `palfadedelta` is 0. `asm1`, `asm2` and `globalpolytype` exist only for
   `polymost_fillpolygon`, which nothing calls.
 - `glview_begin`/`glview_end` temporarily expose the actual target size to
   renderers 2/3 and restore the game's logical view afterward. Renderer 3
@@ -187,6 +187,20 @@ Renderer 3, local changes for the OpenGL backend:
   doesn't have. Sprite fog is twice the wall rate, matching Classic's
   `depth>>(visibility+4)` on a depth scaled by 256. Flat floors and ceilings
   use 4/5 of the wall rate, matching `hlinedriver`'s distance scale.
+- Game initialization sets `polymosttexfullbright` to 240 before loading ART,
+  as the editor already does. The GL 1.1/1.5 glow pass preserves indices
+  240-254 while ordinary texels retain their shade and fog.
+- Sky spans in `polymost.c` split only at shade-row transitions. The helper
+  in `draw.c` uses Classic's logical column angle, sky column scale, view
+  width and visibility shift from `drawsky`/`wallscan`; each span adds that
+  shade to the sector shade on both GL paths. The later engine's absent
+  `globalpisibility` and its constant sky-shade helper are removed.
+- Game overhead maps use the selected native target in renderers 2/3,
+  including GL supersampling. Legacy 640x350 coordinates map into a centered
+  4:3 canvas with black sides before rasterization. Renderer 2 uses its
+  indexed frame; renderer 3 emits GL lines and points through the existing
+  indexed/color 2D path. Explored-wall/sprite filtering and EGA colors remain
+  shared with Classic. Editor 2D retains its 640x480 split-screen buffer.
 - HUD sprites, text and pixels draw at full target resolution in a centered
   4:3 area, with 320x200 game coordinates. `polymost_dorotatesprite` uses
   duke3d's widescreen path and the beta's 1.2 pixel aspect. `printext256`

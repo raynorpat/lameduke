@@ -55,9 +55,13 @@ static const unsigned char ega[16][3] = {
    palette the BIOS sets for it. setgamemode puts the game palette back. */
 void setmapmode(void)
 {
-    xdim = 640;
-    ydim = 350;
-    ydim16 = 350;
+    xdim = getrendermode() >= 2 ? renderwidth : 640;
+    ydim = getrendermode() >= 2 ? renderheight : 350;
+    if (getrendermode() == 3) {
+        xdim = xres;
+        ydim = yres;
+    }
+    ydim16 = ydim;
     pageoffset = 0;
     if (platform_video(xdim, ydim) != 0)
         errorexit(platform_video_error());

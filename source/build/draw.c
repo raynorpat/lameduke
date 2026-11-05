@@ -2436,6 +2436,26 @@ int getrendermode(void)
     return rendmode;
 }
 
+#if defined(POLYMOST) && defined(USE_OPENGL)
+static int skyviewwidth;
+
+/* drawsky/wallscan's column scale, using the logical Classic view. */
+static int polymost_skyshade(int column, int width)
+{
+    int range = (skyviewwidth << 16) / 320;
+    int sw = range;
+    int x = column * skyviewwidth / width;
+    if (x < 0) x = 0;
+    if (x >= skyviewwidth) x = skyviewwidth - 1;
+    if (parallaxtype == 2) {
+        sw = 0x40000000 / sintable()[(radarang[x] + 2560) & 2047];
+        if (skyviewwidth != 320)
+            sw = mulscale(range, sw, 16);
+    }
+    return (int)((65536LL << 16) / sw) >> (visibility + 2);
+}
+#endif
+
 #ifdef POLYMOST
 /* What duke3d's engine gives polymost.c, from this engine's state. The view
    is drawn as duke3d's at a 320x200 aspect: its viewingrange (the field of
@@ -2514,7 +2534,7 @@ static int polymost_wallfront(int l1, int l2)
 #ifdef USE_OPENGL
 /* What duke3d's engine.c and display.c give the GL backend. This engine has
    no palette fades: the fade is none, and the palette shown is palette[]
-   (polymost_glpalette copies it in). Its sky has no distance shade. */
+   (polymost_glpalette copies it in). */
 #define MAXPALOOKUPS 256
 typedef struct { unsigned char r, g, b, f; } palette_t;
 static palette_t curpalette[256];
@@ -2522,8 +2542,6 @@ static palette_t palfadergb;
 #define palfadedelta 0
 static const unsigned char britable[1][64];
 #define curbrightness 0
-#define globalpisibility 0
-#define mulscale4(a, b) mulscale(a, b, 4)
 /* The editor's tile screen and the red-blue mode only. */
 #define qsetmode 200
 #define numpages 2
@@ -2675,8 +2693,10 @@ static void glview_begin(void)
     for (i = 0; i < 9; i++)
         glsaved[i] = *v[i];
 #ifdef USE_OPENGL
-    if (rendmode == 3)
+    if (rendmode == 3) {
+        skyviewwidth = xdimen;
         polymost_glpalette();
+    }
 #endif
     if (!renderframe)
         setrenderresolution(renderwidth, renderheight);
@@ -2822,12 +2842,12 @@ void draw_init(void)
 
 const unsigned char *framebuffer(void)
 {
-    return rendmode == 2 && !ydim16 && renderframe ? renderframe : frame;
+    return rendmode == 2 && (!ydim16 || !editstatus) && renderframe ? renderframe : frame;
 }
 
 int framebuffer_pitch(void)
 {
-    return rendmode == 2 && !ydim16 ? renderwidth : pitch();
+    return rendmode == 2 && (!ydim16 || !editstatus) ? renderwidth : pitch();
 }
 
 /* 0x4F679. Draws tile picnum unscaled at (sx,sy), or with flags: 1 centres
@@ -3036,12 +3056,32 @@ void rotatescalesprite(int sx, int sy, int z, short a, short picnum)
    top ydim16 rows as the exe clips it. */
 void drawline16(int x1, int y1, int x2, int y2, int col)
 {
-    unsigned char *f = frame + pageoffset;
+    int hires = rendmode >= 2 && !editstatus;
+    int w = hires ? ydim * 4 / 3 : 640;
+    int stride = hires ? renderwidth : 640;
+    int origin;
+    unsigned char *f = hires ? renderframe : frame + pageoffset;
     const int h = ydim16;
     int dx, dy, i, e, p;
 
+    if (hires && w > xdim) w = xdim;
+    origin = hires ? (xdim - w) / 2 : 0;
     col &= 15;
-    if (!((x1 >= 0 || x2 >= 0) && (x1 < 640 || x2 < 640) && (y1 >= 0 || y2 >= 0)))
+#ifdef USE_OPENGL
+    if (hires && rendmode == 3) {
+        setpolymost2dview();
+        polymost_2dcolor(col);
+        glsub_begin(GL_LINES);
+        glsub_vertex((float)x1 + .5f, (float)y1 + .5f, 0);
+        glsub_vertex((float)x2 + .5f, (float)y2 + .5f, 0);
+        glsub_end();
+        return;
+    }
+#endif
+    f += origin;
+    x1 -= origin;
+    x2 -= origin;
+    if (!((x1 >= 0 || x2 >= 0) && (x1 < w || x2 < w) && (y1 >= 0 || y2 >= 0)))
         return;
     if (!(y1 < h || h > y2))
         return;
@@ -3057,7 +3097,7 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
         if (y2 >= h)
             y2 = h - 1;
         for (i = y1; i <= y2; i++)
-            f[640 * i + x1] = (unsigned char)col;
+            f[stride * i + x1] = (unsigned char)col;
         return;
     }
     if (y1 == y2) {
@@ -3069,10 +3109,10 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
         }
         if (x1 < 0)
             x1 = 0;
-        if (x2 >= 640)
-            x2 = 639;
+        if (x2 >= w)
+            x2 = (w - 1);
         for (i = x1; i <= x2; i++)
-            f[640 * y1 + i] = (unsigned char)col;
+            f[stride * y1 + i] = (unsigned char)col;
         return;
     }
     if (x1 < 0 && x1 != x2) {
@@ -3091,13 +3131,13 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
         x2 -= y2 * (x2 - x1) / (y2 - y1);
         y2 = 0;
     }
-    if (x1 >= 640 && x1 != x2) {
-        y1 += (639 - x1) * (y2 - y1) / (x2 - x1);
-        x1 = 639;
+    if (x1 >= w && x1 != x2) {
+        y1 += ((w - 1) - x1) * (y2 - y1) / (x2 - x1);
+        x1 = (w - 1);
     }
-    if (x2 >= 640 && x1 != x2) {
-        y2 += (y2 - y1) * (639 - x2) / (x2 - x1);
-        x2 = 639;
+    if (x2 >= w && x1 != x2) {
+        y2 += (y2 - y1) * ((w - 1) - x2) / (x2 - x1);
+        x2 = (w - 1);
     }
     if (y1 >= h && y1 != y2) {
         x1 += (h - 1 - y1) * (x2 - x1) / (y2 - y1);
@@ -3107,7 +3147,7 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
         x2 += (x2 - x1) * (h - 1 - y2) / (y2 - y1);
         y2 = h - 1;
     }
-    if (!((x1 >= 0 || x2 >= 0) && (x1 < 640 || x2 < 640) && (y1 >= 0 || y2 >= 0)) || !(y1 < h || h > y2))
+    if (!((x1 >= 0 || x2 >= 0) && (x1 < w || x2 < w) && (y1 >= 0 || y2 >= 0)) || !(y1 < h || h > y2))
         return;
     dx = abs(x2 - x1) + 1;
     dy = abs(y2 - y1) + 1;
@@ -3122,14 +3162,14 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
             y1 = y2;
             y2 = t;
         }
-        p = x1 + 640 * y1;
+        p = x1 + stride * y1;
         for (i = dx; i > 0; i--) {
-            if (p >= 0 && p < 640 * h)
+            if (p >= 0 && p < stride * h)
                 f[p] = (unsigned char)col;
             e += dy;
             if (e >= dx) {
                 e -= dx;
-                p += y2 > y1 ? 640 : -640;
+                p += y2 > y1 ? stride : -stride;
             }
             p++;
         }
@@ -3143,16 +3183,16 @@ void drawline16(int x1, int y1, int x2, int y2, int col)
             y1 = y2;
             y2 = t;
         }
-        p = x1 + 640 * y1;
+        p = x1 + stride * y1;
         for (i = dy; i > 0; i--) {
-            if (p >= 0 && p < 640 * h)
+            if (p >= 0 && p < stride * h)
                 f[p] = (unsigned char)col;
             e += dx;
             if (e >= dy) {
                 e -= dy;
                 p += x2 > x1 ? 1 : -1;
             }
-            p += 640;
+            p += stride;
         }
     }
 }
@@ -3165,6 +3205,20 @@ static int isshown(const unsigned char *bits, int i)
 /* 0x54130: the 2D area above the status bar, ydim16 rows. */
 void clear2dscreen(void)
 {
+    if (rendmode >= 2 && !editstatus) {
+#ifdef USE_OPENGL
+        if (rendmode == 3) {
+            polymost_glpalette();
+            setpolymost2dview();
+            glsub_flush();
+            glClearColor(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            return;
+        }
+#endif
+        memset(renderframe, 0, (size_t)renderwidth * renderheight);
+        return;
+    }
     memset(frame + pageoffset, 0, (size_t)(640 * ydim16));
 }
 
@@ -3219,11 +3273,23 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
     const short *sin = sintable();
     int blink = 4 * (numframes & 2), i, j, k, ax, ay;
 
-    if (ydim == 200)
+    int hires = rendmode >= 2 && !editstatus;
+    int mapheight = hires ? ydim : 350;
+    int cx = hires ? xdim / 2 : 320, cy = 200 * mapheight / 350;
+    int mapwidth = hires ? ydim * 4 / 3 : 640;
+    if (hires && mapwidth > xdim) mapwidth = xdim;
+
+    if (ydim == 200 && !hires)
         return;
     if (editstatus == 0) {
         clear2dscreen();
         draw2dgrid(x, y, ang, zoom, gride);
+#ifdef USE_OPENGL
+        if (hires && rendmode == 3) {
+            glEnable(GL_SCISSOR_TEST);
+            glScissor((xdim - mapwidth) / 2, 0, mapwidth, ydim);
+        }
+#endif
     }
     for (i = 0; i < numwalls; i++) {
         int ns = wall[i].nextwall, col, x1, y1, x2, y2;
@@ -3250,10 +3316,10 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
             if (linehighlight == i || (linehighlight >= 0 && wall[linehighlight].nextwall == i))
                 col += blink;
         }
-        x1 = (int)(((long long)zoom * (wall[i].x - x)) >> 14) + 320;
-        y1 = (int)(((long long)zoom * (wall[i].y - y)) >> 14) + 200;
-        x2 = (int)(((long long)zoom * (wall[wall[i].point2].x - x)) >> 14) + 320;
-        y2 = (int)(((long long)zoom * (wall[wall[i].point2].y - y)) >> 14) + 200;
+        x1 = (int)(((long long)zoom * (wall[i].x - x) * mapwidth / 640) >> 14) + cx;
+        y1 = (int)(((long long)zoom * (wall[i].y - y) * mapheight / 350) >> 14) + cy;
+        x2 = (int)(((long long)zoom * (wall[wall[i].point2].x - x) * mapwidth / 640) >> 14) + cx;
+        y2 = (int)(((long long)zoom * (wall[wall[i].point2].y - y) * mapheight / 350) >> 14) + cy;
         if ((col & 0xFF) < 16) {
             drawline16(x1, y1, x2, y2, col);
         } else {
@@ -3283,22 +3349,37 @@ void draw2dscreen(int x, int y, short ang, int zoom, short gride)
                 if (editstatus == 1
                     && (k + 4096 == pointhighlight || (highlightcnt > 0 && isshown(show2dsprite, k))))
                     col += blink;
-                sx = (int)(((long long)zoom * (sprite[k].x - x)) >> 14) + 320;
-                sy = (int)(((long long)zoom * (sprite[k].y - y)) >> 14) + 200;
-                if (sx < 2 || sx > 637 || sy < 2 || sy > ydim16 - 3)
+                sx = (int)(((long long)zoom * (sprite[k].x - x) * mapwidth / 640) >> 14) + cx;
+                sy = (int)(((long long)zoom * (sprite[k].y - y) * mapheight / 350) >> 14) + cy;
+                if (sx < (xdim-mapwidth)/2 + 2 || sx > (xdim+mapwidth)/2 - 3 || sy < 2 || sy > ydim16 - 3)
                     continue;
-                for (r = 0; r < 16; r++)
-                    frame[pageoffset + sx + 640 * sy + spritering[r]] = (unsigned char)col;
-                drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) / 768 + sx,
-                    (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) / 768 + sy, col);
+                for (r = 0; r < 16; r++) {
+                    if (hires) {
+                        int dy = (spritering[r] + 1920) / 640 - 3;
+                        plotpixel(sx + spritering[r] - dy * 640, sy + dy, (char)col);
+                    } else
+                        frame[pageoffset + sx + 640 * sy + spritering[r]] = (unsigned char)col;
+                }
+                drawline16(sx, sy, (int)(((long long)zoom * sin[(sprite[k].ang + 2560) & 2047]) >> 11) * mapwidth / (768 * 640) + sx,
+                    (int)(((long long)zoom * sin[(sprite[k].ang + 2048) & 2047]) >> 11) * mapheight / (768 * 350) + sy, col);
             }
         }
     }
-    ax = (int)(((long long)zoom * sin[(ang + 2560) & 2047]) >> 11) / 768;
-    ay = (int)(((long long)zoom * sin[(ang + 2048) & 2047]) >> 11) / 768;
-    drawline16(ax + 320, ay + 200, 320 - ax, 200 - ay, 15);
-    drawline16(ax + 320, ay + 200, ay + 320, 200 - ax, 15);
-    drawline16(ax + 320, ay + 200, 320 - ay, ax + 200, 15);
+    ax = (int)(((long long)zoom * sin[(ang + 2560) & 2047]) >> 11) * mapwidth / (768 * 640);
+    ay = (int)(((long long)zoom * sin[(ang + 2048) & 2047]) >> 11) * mapheight / (768 * 350);
+    drawline16(ax + cx, ay + cy, cx - ax, cy - ay, 15);
+    {
+        int side_x = (int)(((long long)zoom * sin[(ang + 2048) & 2047]) >> 11) * mapwidth / (768 * 640);
+        int side_y = (int)(((long long)zoom * sin[(ang + 2560) & 2047]) >> 11) * mapheight / (768 * 350);
+        drawline16(ax + cx, ay + cy, side_x + cx, cy - side_y, 15);
+        drawline16(ax + cx, ay + cy, cx - side_x, side_y + cy, 15);
+    }
+#ifdef USE_OPENGL
+    if (hires && rendmode == 3) {
+        glsub_flush();
+        glDisable(GL_SCISSOR_TEST);
+    }
+#endif
 }
 
 /* Not in the exe's game paths; written for build.c. Text in the two
@@ -3353,6 +3434,23 @@ void printext256(int xpos, int ypos, short col, short backcol, const char *name,
 /* A pixel in the current mode: the 2D screen is 640 wide, the 3D one pitch(). */
 void plotpixel(int x, int y, char col)
 {
+    if (rendmode >= 2 && ydim16 && !editstatus) {
+        int area = ydim * 4 / 3;
+        if (area > xdim) area = xdim;
+        if (x < (xdim-area)/2 || y < 0 || x >= (xdim+area)/2 || y >= ydim) return;
+#ifdef USE_OPENGL
+        if (rendmode == 3) {
+            setpolymost2dview();
+            polymost_2dcolor((unsigned char)col);
+            glsub_begin(GL_POINTS);
+            glsub_vertex((float)x + .5f, (float)y + .5f, 0);
+            glsub_end();
+            return;
+        }
+#endif
+        renderframe[y * renderwidth + x] = (unsigned char)col;
+        return;
+    }
     if (rendmode >= 2 && !ydim16) {
         int w = rendmode == 3 ? xres : renderwidth, h = rendmode == 3 ? yres : renderheight;
         int area = h * 4 / 3, x1, x2, y1, y2, row;
@@ -3389,7 +3487,7 @@ void showpage(void)
 {
     static unsigned char shown[640 * 480];
 
-    if (ydim == 480 && ydim16 && pageoffset + ydim16 * 640 <= (int)sizeof frame) {
+    if (editstatus && ydim == 480 && ydim16 && pageoffset + ydim16 * 640 <= (int)sizeof frame) {
         int top = 480 - 144;
 
         memcpy(shown, frame + 92160, (size_t)(640 * top));

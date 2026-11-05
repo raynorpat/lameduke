@@ -91,7 +91,6 @@ static GLuint glshdst = 0, glshtrans = 0; //a copy of the framebuffer (unit 3) a
 static int32_t glshcopied = 0, glshdirty[GLSHDIRTYMAX][4], glshndirty = 0;
 static GLuint glidxtex[MAXTILES][2]; //each tile's index texture, repeating and clamped (0: none)
 static char glidxdirty[MAXTILES][2]; //its art changed
-static float glskyshade = 0.f; //classic's distance shade of the parallaxed sky, while drawing it
 
 	//Texture filtering on the GL 2.1 tier (gltexturefilter bilinear or
 	//   trilinear): the frame holds colour instead of indices. Each texel of
@@ -1445,16 +1444,6 @@ static GLuint polymost_idxtex (int32_t dapic, int32_t clamp)
 	return(*tex);
 }
 
-	//Classic's parallaxed sky is a sector's shade plus a distance shade that's the
-	//   same everywhere (parascan's swplc, globalpisibility)
-static float polymost_skyshade (int32_t vis)
-{
-	int32_t v = globalpisibility;
-
-	if (vis) v = mulscale4(v,(int32_t)((unsigned char)(vis+16)));
-	return((float)(mulscale16(mulscale16(xdimscale,viewingrange),v)>>8));
-}
-
 	//Use this for both initialization and uninitialization of OpenGL.
 void polymost_glreset ()
 {
@@ -1885,7 +1874,7 @@ static void polymost_gl_drawpoly(const polymost_polygon *poly)
 			polymost_shprog((k >= 2) ? 2 : 1);
 			polymost_shtile(globalpicnum,method&4);
 			pc[0] = pc[1] = pc[2] = pc[3] = 1.f;
-			glsub_color((float)globalshade+glskyshade,(float)globalpal,((glscene) && (fog_is_on))?glfogshades:0.f,
+			glsub_color((float)globalshade,(float)globalpal,((glscene) && (fog_is_on))?glfogshades:0.f,
 				(float)k);
 			if (!waloff[globalpicnum]) glColorMask(0,0,0,0); //the mirror hack: only depth
 		}
@@ -2412,12 +2401,11 @@ static void polymost_gl_sectorfog(int32_t sectnum)
 	}
 }
 
-static void polymost_gl_beginsky(int32_t visibility)
+static void polymost_gl_beginsky(void)
 {
 	int32_t i;
 			if (rendmode == 3)
 			{
-				glskyshade = polymost_skyshade(visibility);
 				if (!nofog) {
 				glDisable(GL_FOG);
 				fog_is_on = 0;
@@ -2438,7 +2426,6 @@ static void polymost_gl_endsky(void)
 			if (rendmode == 3)
 			{
 				skyclamphack = 0;
-				glskyshade = 0.f;
 				if (!nofog) {
 				glEnable(GL_FOG);
 				fog_is_on = 1;
