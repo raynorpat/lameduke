@@ -321,6 +321,52 @@ void _glframedrawn(void)
 }
 #endif
 
+/* Keep the editor's complete window frame inside the current monitor's
+   work area, without changing its logical map/status-bar dimensions. */
+static int fit_editor_window(void)
+{
+    SDL_Rect bounds;
+    int display, x, y, w, h, max_w, max_h, resized = 0;
+    int top = 0, left = 0, bottom = 0, right = 0;
+
+    if (!editstatus || displaymode || !window)
+        return 0;
+    display = SDL_GetWindowDisplayIndex(window);
+    if (display < 0 || SDL_GetDisplayUsableBounds(display, &bounds) != 0)
+        return 0;
+    SDL_GetWindowBordersSize(window, &top, &left, &bottom, &right);
+    max_w = bounds.w - left - right;
+    max_h = bounds.h - top - bottom;
+    if (max_w < 1 || max_h < 1)
+        return 0;
+    SDL_GetWindowSize(window, &w, &h);
+    if (w > max_w) {
+        h = (int)((int64_t)h * max_w / w);
+        w = max_w;
+        resized = 1;
+    }
+    if (h > max_h) {
+        w = (int)((int64_t)w * max_h / h);
+        h = max_h;
+        resized = 1;
+    }
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (resized)
+        SDL_SetWindowSize(window, w, h);
+    SDL_GetWindowPosition(window, &x, &y);
+    if (resized) {
+        x = bounds.x + left + (max_w - w) / 2;
+        y = bounds.y + top + (max_h - h) / 2;
+    }
+    if (x < bounds.x + left) x = bounds.x + left;
+    if (y < bounds.y + top) y = bounds.y + top;
+    if (x > bounds.x + left + max_w - w) x = bounds.x + left + max_w - w;
+    if (y > bounds.y + top + max_h - h) y = bounds.y + top + max_h - h;
+    SDL_SetWindowPosition(window, x, y);
+    return resized;
+}
+
 /* Every mode was shown 4:3: full screen keeps that with black bars. */
 static void fit_renderer(void)
 {
@@ -345,6 +391,7 @@ static void apply_displaymode(void)
     }
     SDL_SetWindowFullscreen(window, 0);
     SDL_SetWindowFullscreen(window, display_flags());
+    fit_editor_window();
     fit_renderer();
 #ifdef USE_OPENGL
     if (glcontext) {
@@ -366,10 +413,15 @@ int platform_video(int width, int height)
 #ifdef USE_OPENGL
     /* The GL window keeps its size; the 8-bit frame is scaled into it. */
     if (glcontext) {
+        int resized = 0;
         if (getrendermode() == 2 && (!ydim16 || !editstatus)) {
             SDL_SetWindowSize(window, width, height);
-            gl_resvars();
+            resized = 1;
         }
+        if (fit_editor_window())
+            resized = 1;
+        if (resized)
+            gl_resvars();
         video_error = NULL;
         return gl_alloc8(width, height);
     }
@@ -391,6 +443,7 @@ int platform_video(int width, int height)
             return -1;
         }
     }
+    fit_editor_window();
     if (!renderer) {
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | (vsync ? SDL_RENDERER_PRESENTVSYNC : 0));
         if (!renderer)
@@ -555,6 +608,7 @@ int setgamemode_gl(int width, int height)
         window = win;
         glcontext = ctx;
     }
+    fit_editor_window();
     /* destroying an SDL_Renderer can leave no context current */
     SDL_GL_MakeCurrent(window, glcontext);
     SDL_GL_SetSwapInterval(vsync);

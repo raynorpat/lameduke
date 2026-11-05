@@ -74,6 +74,9 @@ shows every local change. In summary:
   display row while their complete names remain available for loading. Tile
   names come from `DEFS.CON` through a new `ExtLoadNames` hook in `bstub.h`.
   Drawn walls get `(-1,-1)` second links. The window title names the map.
+- Windowed editor presentation fits the current monitor's usable bounds,
+  including its title bar and borders, while retaining the logical map/status
+  layout. Software, GL and 2D/3D transitions use the same size limit.
 
 The engine side of the editor was lifted from `D3D.EXE`, whose engine was
 shared with the 1994 BUILD:
