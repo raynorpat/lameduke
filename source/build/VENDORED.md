@@ -197,6 +197,11 @@ Renderer 3, local changes for the OpenGL backend:
   software rasterizer's row-edge scratch array supports 8192 rows.
   `LAMEDUKE_RESOLUTION=WxH` is an inert game test hook until Video Options
   calls the API. `setgamemode` ignores the setup mode byte in renderers 2/3.
+  Crossing between Classic and hires rebuilds the game's logical dimensions
+  and view rectangle: mode 7 returns to its 640x480 full view, while hires
+  restores the player's 320x200 view size. Renderer 2's SDL window uses the
+  requested size even at 320x200; only the legacy software presentation
+  stretches a 320x200 frame into a 960x720 window.
 - Heightmap floors in renderer 3 add a depth-tested mesh after the opaque
   world pass. The 64x64 height tile repeats in world coordinates, with one
   sample per 16 map units and z = floorz - (sample << 8), matching the beta's

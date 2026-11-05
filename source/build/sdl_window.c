@@ -378,7 +378,7 @@ int platform_video(int width, int height)
     window_w = getrendermode() == 2 ? width : width * 3;
     window_h = getrendermode() == 2 ? height : height * 3;
     /* 320x200 was stretched to 4:3 on a VGA monitor. */
-    if (width == 320 && height == 200)
+    if (getrendermode() < 2 && width == 320 && height == 200)
         window_h = 720;
     if (window)
         SDL_SetWindowSize(window, window_w, window_h);

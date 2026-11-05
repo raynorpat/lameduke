@@ -149,10 +149,16 @@ void game_setrenderer(int renderer)
                prev ? "keeping the current renderer." : "using the classic renderer.");
         setrendermode(prev);
     }
-    if (getrendermode() == 2)
-        platform_video(renderwidth, renderheight);
-    else if (prev >= 2 && getrendermode() < 2)
+    if ((prev >= 2) != game_hires()) {
+        /* The game view is 320x200 in hires, even when Classic uses mode 7. */
         setgamemode();
+        if (!game_hires() && setup_byte(0) == 7)
+            setview(0, 0, 639, 479);
+        else
+            viewsize(myconnectindex);
+    } else if (getrendermode() == 2) {
+        platform_video(renderwidth, renderheight);
+    }
 }
 
 /* 0x2F190. A lift (SE 17) placed with shade over 16 sets every other lift
