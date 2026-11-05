@@ -42,7 +42,7 @@ a comparison point, not an asserted ancestor of the code here.
 | `cache.c`, `cache1d.h` | Cache interface used by this rebuild. |
 | `engine.c`, `engine.h` | Engine initialization and reading the original `SETUP.DAT` bytes. |
 | `network.c`, `network.h` | Single-player connection state; multiplayer is a stub and opens no connection. |
-| `sdl_main.c`, `sdl_input.c`, `sdl_window.c`, `sdl_sys.c`, `sdl_opengl.c` and headers | SDL2 startup, input, timing and framebuffer presentation. `sdl_opengl.c` is duke3d's and is not built yet. |
+| `sdl_main.c`, `sdl_input.c`, `sdl_window.c`, `sdl_sys.c`, `sdl_opengl.c` and headers | SDL2 startup, input, timing and framebuffer presentation. `sdl_opengl.c` is imported from duke3d and built when OpenGL and Polymost are enabled. |
 | `polymost.c`, `polymost_soft.c`, `polymost_opengl*`, `polymost.h` | duke3d's Polymost; see below. |
 | `platform.h`, `plat_unix.c`, `plat_win32.c` | Platform file access, including case-insensitive filename fallback on Unix. |
 | `CMakeLists.txt` | Builds the engine as a static library for the game, the editor and the map tools. |
@@ -55,13 +55,14 @@ The game reads the original loose files rather than a GRP archive.
 [raynorpat/duke3d](https://github.com/raynorpat/duke3d) at
 `2f141cac5a0d2106780dff15fc2e2b8757618bfc` (`source/build/`): Ken Silverman's
 editor under [BUILDLIC.TXT](BUILDLIC.TXT), with icculus's and duke3d's changes.
-They are the only files taken from that tree. Commit `8035cc7` holds them
+The Polymost files below are also taken from that tree. Commit `8035cc7` holds them
 unchanged, so `git diff 8035cc7 -- source/editor/build.c source/editor/bstub.h`
 shows every local change. In summary:
 
 - The 1996 engine headers are replaced by `source/editor/editor.h`, which sits
   over this engine, and the platform calls by `source/editor/edglue.c`.
-  Polymost, renderer cycling, `build.cfg` and `editormode` are gone.
+  Polymost, renderer cycling and `build.cfg` are adapted to this engine;
+  `editormode` is gone.
 - Records are version 5. Wall and sprite `pal`, sprite `clipdist` and offsets,
   and slopes are removed. The slope keys became the floor heightmap tool. T
   and B no longer touch sprite cstat bits above 7.
@@ -101,7 +102,8 @@ are both on, which also builds `sdl_opengl.c` and `polymost_opengl_submit.c`.
 Otherwise, or when the GL window can't be made, `setrendermode(3)` gives the
 classic renderer.
 
-Local changes, in `polymost.c` and `polymost_soft.c`:
+Local changes in the imported files (compare with `d8c91dd`; `polymost.h`
+was added locally):
 
 - Records are version 5, with no wall or sprite `pal`. As in classic, walls
   and masked walls take their sector's `floorpal` and sprites `tspritepal`
@@ -159,6 +161,9 @@ Renderer 3, local changes for the OpenGL backend:
   fades around a change, the overlay, Alt+Enter, the mode-list cleanup and
   screenshots. `platform_capture` reads renderer 3's frame for
   `LAMEDUKE_FRAME`.
+- `polymost_opengl.c` adapts fog and clears the 3D viewport as described
+  below. `polymost.h` declares the integration and editor tile hook.
+  `polymost_opengl_submit.h` and `sdl_opengl_internal.h` are unchanged.
 - `sdl_opengl.c` and `polymost_opengl_submit.c` include `sdl_window.h`
   (`glinfo`, `xres`, `yres`) instead of duke3d's `build.h`.
 - `draw.c` gives the GL backend `palette_t` and `curpalette`, copied from
@@ -195,8 +200,9 @@ Renderer 3, local changes for the OpenGL backend:
   allocation or video failure. Accepted sizes are 320..8192 by 200..8192;
   defaults are 640x480. It does not change the saved logical view. The
   software rasterizer's row-edge scratch array supports 8192 rows.
-  `LAMEDUKE_RESOLUTION=WxH` is an inert game test hook until Video Options
-  calls the API. `setgamemode` ignores the setup mode byte in renderers 2/3.
+  `LAMEDUKE_RESOLUTION=WxH` is a game test hook applied by
+  `game_setrenderer`, including a `/p` override. `setgamemode` ignores the
+  setup mode byte in renderers 2/3.
   Crossing between Classic and hires rebuilds the game's logical dimensions
   and view rectangle: mode 7 returns to its 640x480 full view, while hires
   restores the player's 320x200 view size. Renderer 2's SDL window uses the
@@ -241,5 +247,8 @@ source release.
 
 - `draw.c`: map editor logical picking coordinates into the Polymost drawable
   while drawing, and provide the GL tile-browser view and logical pixel mapping.
-- `editor/build.c`: restore configured 3D modes, cycle renderers, use the GL
-  tile view, and redraw the last frame beneath 3D quit prompts.
+- `editor/build.c`: restore configured 3D modes, cycle and persist normal
+  renderers while leaving debug transient, rescale the cursor between logical
+  modes, draw the tile browser in GL or indexed software, redraw the last GL
+  frame beneath quit and numeric prompts. `editor/edglue.c` captures the
+  active high-resolution 3D frame before swap.

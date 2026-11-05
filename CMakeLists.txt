@@ -10,10 +10,9 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
 
-# Software renderer from D3D.EXE. OpenGL is only the presentation path,
-# following duke3d's SDL/GL platform layer. Polymost's renderers, picked
-# with /p, come from duke3d.
-option(LAMEDUKE_OPENGL "Present the framebuffer through OpenGL" ON)
+# Classic software rendering is reconstructed from D3D.EXE. Polymost and
+# its OpenGL backend come from duke3d and can be disabled independently.
+option(LAMEDUKE_OPENGL "Enable the Polymost OpenGL renderer" ON)
 option(LAMEDUKE_POLYMOST "Build Polymost's renderers" ON)
 set(LAMEDUKE_FETCH_SDL "AUTO" CACHE STRING "See cmake/Dependencies.cmake")
 
