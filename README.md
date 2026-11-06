@@ -5,11 +5,27 @@ known as LameDuke. The game and its early Build engine behavior are being
 recovered from `D3D.EXE`, with SDL2 providing the modern platform layer and
 CMake building for Windows, macOS and Linux.
 
-The goal is to run the beta's original loose data files and reproduce its
-classic renderer, demos and local gameplay. This is an early reconstruction:
-demo playback and local play work, but behavior and rendering are still being
-checked against the DOS executable. Menus, sound effects and music are not yet
-complete; multiplayer is stubbed out.
+| In game: E1L1 with the status bar | BUILD editor: L1 in 2D mode |
+|---|---|
+| ![LameDuke in-game on L1 with the status bar](docs/images/ingame-e1l1.png) | ![The BUILD editor showing L1 from above](docs/images/editor-l1.png) |
+
+## The reconstruction
+
+The goal is to run the beta's original loose data files and reproduce what
+`D3D.EXE` does: its classic renderer, demos and local gameplay. Each function
+is rebuilt in C from the DOS executable, and source comments cite the exe
+addresses (`0x249B0`) and globals they come from. Where the port knowingly
+differs from the exe, such as guarding a read the exe made out of bounds, the
+comment says so. The modern parts are added beside the original rather than
+over it: the SDL2 platform layer, the Polymost renderers from the later
+Build source, Video Options, and a BUILD map editor for this beta's maps.
+
+Status: attract demos, local play, menus, sound effects and FM music work.
+The Classic renderer and game behavior are still being compared against the
+DOS executable. Multiplayer is stubbed out, the joystick menu item does
+nothing, and only the Sound Blaster/FM sound paths are implemented. See
+[docs/reconstruction.md](docs/reconstruction.md) for the method and the full
+status.
 
 ## Quick start
 
@@ -50,6 +66,22 @@ The original release notes are in [LAMEDUKE.TXT](LAMEDUKE.TXT).
 `build/bin/convmap4` converts the version-4 maps `L9.MAP` and `M8.MAP` to
 version 5. See [docs/map-editor.md](docs/map-editor.md).
 
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [Game sheet](docs/game-sheet.md) | Release, files, episodes and levels, demos, switches, enemies, weapons, items, music and controls |
+| [Reconstruction](docs/reconstruction.md) | Method, where the port differs from the exe, source tree, test variables and tools, status |
+| [Build engine](docs/build-engine.md) | Sectors, walls and sprites, sprite lists, collision, tiles, palette and the platform layer |
+| [Rendering](docs/rendering.md) | Classic and Polymost renderers, presentation, game-side drawing and known gaps |
+| [Audio and music](docs/audio.md) | The audio library, sound effects, MIDI and FM music, sound cards |
+| [Network](docs/network.md) | The multiplayer remains, the sync stream and the demo format |
+| [Menus](docs/menus.md) | Menu tree and keys, save and restore, Video Options |
+| [CON script](docs/con-script.md) | The script language, its compiler and interpreter, every keyword |
+| [Map format](docs/map-format.md) | Build map versions 5 and 4, field by field, and converting v4 |
+| [Map editor](docs/map-editor.md) | Using the BUILD editor and what it saves |
+| [Game speed](docs/game-speed.md) | The exe's timing, measured in DOSBox, and the port's fixed-rate loop |
+
 ## Game data
 
 The repository contains the beta's loose maps, art, scripts, demos, palette,
@@ -76,33 +108,16 @@ Pass options with `-D` when configuring.
 
 Classic is the default 1994 indexed software renderer. Polymost Software
 renders into an indexed buffer at a selected resolution; Polymost OpenGL
-renders the world with OpenGL. Normal Video Options choices are Classic,
-Polymost Software and Polymost OpenGL when available. Builds without OpenGL
-or Polymost offer Classic only. If OpenGL cannot start, the game keeps a
-working renderer or falls back to Classic.
+renders the world with OpenGL. Builds without OpenGL or Polymost offer Classic
+only, and if OpenGL cannot start the game falls back to a working renderer.
+`/p0`, `/p1`, `/p2` and `/p3` pick Classic, Polymost debug, Polymost Software
+and Polymost OpenGL for one run without changing the saved choice.
 
-Open **Game Options → Video Options** to choose renderer, resolution, display mode,
-texture filtering, mip level, VSync, contrast, saturation and supersampling.
-Resolution is staged with the arrow keys and applied with Enter; unavailable
-options are dimmed. Filtering and mip level require OpenGL; contrast,
-saturation and supersampling require its shader path. Successful changes are
-saved to `duke.cfg` in the working directory. `SETUP.DAT` still supplies the
-Classic video mode and other original settings and is not rewritten here.
-Some background VSync-on runs have stalled during testing; foreground
-behavior remains unverified.
-
-The game keeps its 320×200 layout, centered in a 4:3 area at high resolution;
-the beta statusbar tile is 320×22 pixels. Renderer 3 draws floor heightmaps;
-Polymost Software draws those floors flat. Reflective-floor postprocessing and
-the fixed-size F12 PCX capture are skipped in renderers 2 and 3; camera and
-mirror tiles use a Classic offscreen render. Visual fidelity remains under
-investigation.
-
-`/p0`, `/p1`, `/p2` and `/p3` select Classic, Polymost debug, Polymost
-Software and Polymost OpenGL for the current run. Debug is a transient
-solid-colour renderer, not a normal saved choice. `/p` overrides the saved
-renderer without changing it; an explicit renderer selection in Video Options
-updates the saved choice. Unavailable renderers fall back to Classic.
+Open **Game Options → Video Options** to choose renderer, resolution, display
+mode, texture filtering, mip level, VSync, contrast, saturation and
+supersampling. Changes are saved to `duke.cfg` in the working directory.
+`SETUP.DAT` still supplies the Classic video mode and is not rewritten. See
+[docs/rendering.md](docs/rendering.md) for details and known gaps.
 
 ### `duke.cfg`
 
@@ -123,22 +138,16 @@ The editor uses the same keys in its own `build.cfg`.
 | `saturation` | `1` | 0–2 |
 | `supersample` | `off` | `off`, `2k`, `4k`, `8k` |
 
-## Game speed
-
-The simulation runs at 15 updates per second, measured against a 486-class
-DOSBox run, while frames can be drawn between updates with interpolation.
-Below 15 frames per second the game slows down. Doors, enemies and fire rate
-still need a by-eye comparison against DOSBox; see [game speed](docs/game-speed.md)
-for the measurements and limitations.
-
 ## Project layout
 
 | Path | Contents |
 |---|---|
-| `source/build/` | Reconstructed Build engine, renderer and platform code. See [VENDORED.md](source/build/VENDORED.md). |
-| `source/audiolib/` | Audio library interfaces and unfinished implementation. |
 | `source/` | Game simulation, CON compiler and interpreter, demos, and menus. |
-| `docs/superpowers/` | Rebuild design and implementation plan. |
+| `source/build/` | Reconstructed Build engine, renderers and platform code. See [VENDORED.md](source/build/VENDORED.md). |
+| `source/audiolib/` | The audio library: digital sound, MIDI and the OPL emulator; other DOS cards are stubs. |
+| `source/editor/` | The BUILD map editor. |
+| `tools/` | `mapcheck`, `cfgcheck` and `convmap4`. |
+| `docs/` | The docs above; `docs/superpowers/` holds the rebuild designs and plans. |
 
 ## Build engine license
 
