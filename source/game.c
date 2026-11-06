@@ -386,9 +386,13 @@ static int play_demo(const demo_t *demo)
 /* the wall clock in TICRATE ticks; *rem keeps the ms left over */
 static void tick(uint32_t *prev, int *clock, int *rem)
 {
-    uint32_t now = timer_ticks();
+    uint32_t now = timer_ticks(), ms = now - *prev;
 
-    *rem += (int)(now - *prev) * TICRATE;
+    /* a gap past ~5 hours (a sleep) would overflow the multiply; more than
+       a second is dropped as a stall anyway */
+    if (ms > 1000)
+        ms = 1000;
+    *rem += (int)ms * TICRATE;
     *clock += *rem / 1000;
     *rem %= 1000;
     *prev = now;
