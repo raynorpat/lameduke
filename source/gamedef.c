@@ -14,7 +14,7 @@
 int script[MAXSCRIPTSIZE];
 int scriptsize;
 int actorscrptr[MAXTILES];
-char labels[MAXLABELS][64];
+char labels[MAXLABELS + 1][64]; /* the spare row holds a name being read when the table is full */
 int labelcode[MAXLABELS];
 int labelcnt;
 char musicfn[5][10][13];
@@ -221,6 +221,17 @@ static int findlabel(const char *name, int count)
     return -1;
 }
 
+/* Keeps the name just read into labels[labelcnt] as a label for code. */
+static void addlabel(int code)
+{
+    if (labelcnt < MAXLABELS) {
+        labelcode[labelcnt++] = code;
+        return;
+    }
+    printf("  * ERROR!(L%ld) More than %d labels.\n", (long)line_number, MAXLABELS);
+    error++;
+}
+
 /* ORs the numbers that follow, up to the next keyword, into one word. */
 static void emitflags(void)
 {
@@ -240,13 +251,12 @@ static void definedata(int count, const char *warn)
     int j;
 
     scriptptr--;
-    if (labelcnt < MAXLABELS)
-        copylabel(labels[labelcnt]);
+    copylabel(labels[labelcnt]);
     if (findlabel(labels[labelcnt], labelcnt) >= 0) {
         warning++;
         printf(warn, (long)line_number, labels[labelcnt]);
-    } else if (labelcnt < MAXLABELS) {
-        labelcode[labelcnt++] = scriptptr;
+    } else {
+        addlabel(scriptptr);
     }
     for (j = 0; j < count; j++) {
         if (peekkeyword() != -1)
@@ -299,6 +309,12 @@ static int parsecommand(void)
 
     if (warning + error > 12)
         return 1;
+    /* a command writes at most a few words past scriptptr without emit's check */
+    if (scriptptr >= MAXSCRIPTSIZE - 8) {
+        printf("  * ERROR!(L%ld) Script is larger than %d words.\n", (long)line_number, MAXSCRIPTSIZE);
+        error++;
+        return 1;
+    }
     if (textptr[0] == 0 || textptr[1] == 0)
         return 1;
     tw = getkeyword();
@@ -414,34 +430,32 @@ static int parsecommand(void)
         }
         return 0;
     case K_SOUND:
-        copylabel(labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1]);
+        copylabel(labels[labelcnt]);
         for (i = 0; i < NUMCONSOUNDS; i++) {
-            if (strcmp(consounds[i], labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1]) == 0) {
+            if (strcmp(consounds[i], labels[labelcnt]) == 0) {
                 emit(i);
                 return 0;
             }
         }
         printf("  * ERROR!(L%ld) Sound '%s' not found.\n", (long)line_number,
-            labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1]);
+            labels[labelcnt]);
         error++;
         return 0;
     case K_STATE:
         if (parsing_actor < 0 && !parsing_state) {
-            if (labelcnt < MAXLABELS)
-                copylabel(labels[labelcnt]);
+            copylabel(labels[labelcnt]);
             parsing_state = 1;
             scriptptr--;
-            if (labelcnt < MAXLABELS)
-                labelcode[labelcnt++] = scriptptr;
+            addlabel(scriptptr);
             return 0;
         }
-        copylabel(labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1]);
-        i = findlabel(labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1], labelcnt);
+        copylabel(labels[labelcnt]);
+        i = findlabel(labels[labelcnt], labelcnt);
         if (i >= 0)
             script[scriptptr] = labelcode[i];
         else {
             printf("  * ERROR!(L%ld) State '%s' not found.\n", (long)line_number,
-                labels[labelcnt < MAXLABELS ? labelcnt : MAXLABELS - 1]);
+                labels[labelcnt]);
             error++;
         }
         scriptptr++;
@@ -455,8 +469,7 @@ static int parsecommand(void)
         }
         return 0;
     case K_DEFINE:
-        if (labelcnt < MAXLABELS)
-            copylabel(labels[labelcnt]);
+        copylabel(labels[labelcnt]);
         i = findlabel(labels[labelcnt], labelcnt);
         if (i >= 0) {
             warning++;
@@ -464,8 +477,8 @@ static int parsecommand(void)
                 labels[labelcnt]);
         }
         transnum();
-        if (i < 0 && labelcnt < MAXLABELS)
-            labelcode[labelcnt++] = lastemitted();
+        if (i < 0)
+            addlabel(lastemitted());
         scriptptr -= 2;
         return 0;
     case K_COMMENT:

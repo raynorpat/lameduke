@@ -18,7 +18,7 @@ void execute(short i, short p, int dist);
 extern int script[MAXSCRIPTSIZE];   /* 0x976CC */
 extern int scriptsize;              /* (0x976C8 - script) / 4 */
 extern int actorscrptr[MAXTILES];   /* 0x8AE78: 0 when the tile has no actor */
-extern char labels[MAXLABELS][64];  /* 0x12523C */
+extern char labels[MAXLABELS + 1][64];  /* 0x12523C */
 extern int labelcode[MAXLABELS];    /* 0x125244 */
 extern int labelcnt;                /* 0x125238 */
 extern const char *const keyw[NUMKEYWORDS];   /* 0x82B10 */

@@ -246,10 +246,10 @@ enda
 
 ## Known limits
 
-The compiler does not check that the script fits:
+How the compiler handles its limits:
 
-- `emit` and `lastemitted` stop at `MAXSCRIPTSIZE`, but other writes do not. The `actor` header writes `script[parsing_actor + i]`, `end` writes `script[scriptptr - 1]`, and a `state` call writes `script[scriptptr]`, all with no bound. A script past 16384 ints writes beyond the array, and the code past the end is lost even where the writes are checked.
-- When the label table is full (512), `define`, `action` and `move` still read and print `labels[MAXLABELS]`, one past the end. `sound` and `state` calls clamp to the last entry.
+- A script that reaches `MAXSCRIPTSIZE` − 8 ints stops compiling with "Script is larger than 16384 words." Each command checks this before it runs, because the `actor` header, `end` and a `state` call write a few words past `scriptptr` without `emit`'s bound. The exe had no such check and wrote past the array.
+- A 513th label is an error ("More than 512 labels."). `labels[]` has one spare row, so the name being read always has somewhere to go; the exe read one past the end here.
 - Line numbers in messages can run ahead. A `//` comment counts its newline once itself and once more when the next token is found. An include's lines are added to the total.
 
 The shipped scripts stay well inside these limits: the port reports 1868 lines and 13336 bytes (3334 of 16384 ints) with no warnings.
