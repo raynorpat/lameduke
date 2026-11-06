@@ -376,57 +376,66 @@ static int play_demo(const demo_t *demo)
     return PLAY_DONE;
 }
 
-/* The single-player loop 0x16F4A runs domovethings once per frame drawn, and
-   much of it (actors, scripts, weapons) moves per call, not per tic. The game
-   was paced on a 486 DX2-66 drawing 15 frames a second (docs/game-speed.md),
-   so the logic runs at that rate and frames are drawn as fast as they come.
-   Below 15 frames a second the game slows down, as it did on the 486. */
-#define GAME_LOGIC_HZ 15
+/* Duke3D's main loop: a 120 Hz clock, and a logic step each time it passes
+   ototalclock + TICSPERFRAME, every step with synctics = TICSPERFRAME. */
+#define TICRATE 120
+/* Duke3D's is TICRATE/26 (4); the prototype's per-step counters were paced
+   on a 486's 15 loops a second, so 8 */
+#define TICSPERFRAME 8
+
+/* the wall clock in TICRATE ticks; *rem keeps the ms left over */
+static void tick(uint32_t *prev, int *clock, int *rem)
+{
+    uint32_t now = timer_ticks();
+
+    *rem += (int)(now - *prev) * TICRATE;
+    *clock += *rem / 1000;
+    *rem %= 1000;
+    *prev = now;
+}
 
 static int play_level(void)
 {
-    uint32_t next;
-    int pace = 0, clock_remainder = 0;
+    uint32_t prev;
+    int clock = 0, ototalclock = 0, rem = 0;
     const char *shot = getenv("LAMEDUKE_FRAME");
     const char *speed = getenv("LAMEDUKE_SPEED");
     const char *trace = getenv("LAMEDUKE_TRACE");
     const char *nosmooth = getenv("LAMEDUKE_NOSMOOTH");
     int logic = 0, frames = 0;
 
-    next = timer_ticks();
+    prev = timer_ticks();
     present();
     while (!input_poll()) {
-        uint32_t now = timer_ticks();
-        int steps, ran = 0;
+        int ran = 0, entered = 0;
         int fv, sv, av, bits;
 
         input_scriptframe(frames + 1);
         frames++;
-        /* a frame dump runs one loop per frame, so frame N is always the same */
-        if ((shot && shot[0]) || (int32_t)(now - next) >= 0) {
-            /* after a stall the lost time is not made up */
-            if ((int32_t)(now - next) > 1000)
-                next = now;
-            pace += 1000;
-            next += (uint32_t)(pace / GAME_LOGIC_HZ);
-            pace %= GAME_LOGIC_HZ;
+        tick(&prev, &clock, &rem);
+        /* a frame dump runs one step per frame, so frame N is always the same */
+        if (shot && shot[0])
+            clock = ototalclock + TICSPERFRAME;
+        /* after a stall the lost time is not made up */
+        else if (clock - ototalclock > TICRATE)
+            ototalclock = clock - TICSPERFRAME;
+        while (clock >= ototalclock + TICSPERFRAME) {
+            ototalclock += TICSPERFRAME;
             ran = 1;
-            /* getinput 0x30E60: the ticks since the last loop */
-            steps = clock_tics(1, GAME_LOGIC_HZ, &clock_remainder);
             functionkeys();
             /* getinput 0x30E60 gives nothing while the menu is open. */
             if (ps[myconnectindex].gm & 1) {
                 input_clear();
                 fv = sv = av = bits = 0;
             } else {
-                input_sample(steps, &fv, &sv, &av, &bits);
+                input_sample(TICSPERFRAME, &fv, &sv, &av, &bits);
             }
             syncfvel[0] = (signed char)fv;
             syncsvel[0] = (signed char)sv;
             syncavel[0] = (signed char)av;
             syncbits[0] = bits;
-            synctics = (unsigned char)steps;
-            totalclock += steps;
+            synctics = TICSPERFRAME;
+            totalclock += TICSPERFRAME;
             updateinterpolations();
             domovethings();
             if (trace && trace[0])
@@ -442,16 +451,22 @@ static int play_level(void)
             if (ps[screenpeek].gm & 8) {
                 ps[screenpeek].level++;
                 enterlevel(4);
-                next = timer_ticks();
-                continue;
+                tick(&prev, &clock, &rem);
+                ototalclock = clock;
+                entered = 1;
+                break;
             }
         }
+        if (entered)
+            continue;
         /* duke3d's smoothratio: the share of this step gone by when the frame is drawn */
         smoothratio = 65536;
         if (!(shot && shot[0]) && !(nosmooth && nosmooth[0]) && !gamepaused && !(ps[myconnectindex].gm & 1)) {
-            int left = (int)(next - timer_ticks()) * 65536 / 1000 * GAME_LOGIC_HZ;
+            int gone;
 
-            smoothratio = left < 0 ? 65536 : left > 65536 ? 0 : 65536 - left;
+            tick(&prev, &clock, &rem);
+            gone = (clock - ototalclock) * 1000 + rem;
+            smoothratio = gone >= TICSPERFRAME * 1000 ? 65536 : gone * 65536 / (TICSPERFRAME * 1000);
         }
         viewtic = ran;
         present();
