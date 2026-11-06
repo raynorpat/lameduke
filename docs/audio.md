@@ -75,7 +75,7 @@ The CON command `music N file ...` fills a row of `char musicfn[5][10][13]`. `mu
 
 `MIDI_PlaySong` (0x6BD48) reads the division and schedules `MIDI_Service` with TaskMan at `120 * division / 60` ticks a second, 120 BPM. A tempo meta event (0x51) changes the rate to `60000000 / tempo * division / 60`. `MIDI_Service` (0x6B6A0) runs once a MIDI tick: it walks every track, sends note, controller, program and bend events to the driver table (AL_MIDI here), handles controller 7 as channel volume itself, and rewinds all tracks when the last one ends. A meta event's length is read as one byte, and a sysex as a status with no data, as in the exe.
 
-Starting a song sets `taskman = 1`. That switches the game clock to the 18.2 Hz chain TaskMan leaves behind. See [game-speed.md](game-speed.md).
+A song that starts (`MUSIC_PlaySong` returns `MUSIC_Ok`) sets `taskman = 1`; one that fails leaves the clock alone. That switches the game clock to the 18.2 Hz chain TaskMan leaves behind. See [game-speed.md](game-speed.md).
 
 ## Files shipped
 

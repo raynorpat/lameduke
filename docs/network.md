@@ -79,7 +79,7 @@ Recording (`/r`, `demomode = 1`):
 
 - `domovethings` calls `demo_record` once per step when the game is not paused (0x18EEB). It stores `sync*[0]` and `synctics`.
 - The count stops at 0x3FFF. After that, each new sample overwrites the slot after the last one kept.
-- On the way out (`quitgame` or the window closing), `demo_write` drops the last sample and writes `mydemo_0.dmo` when the game is on `/v1 /l1`, otherwise `mydemo_1.dmo`. Those names are two of the shipped attract demos, so recording replaces one of them.
+- On the way out (`quitgame` or the window closing), `demo_write` drops the last sample and writes `mydemo_0.dmo` when the game is on `/v1 /l1`, otherwise `mydemo_1.dmo`. Those names are two of the shipped attract demos. Before the first overwrite, the original is copied to `mydemo_N.dmo.bak`; an existing `.bak` is kept. A recording with no samples is not written, and the game says so.
 - The port records `synctics = 8` for every sample. Demos from the exe hold the tic count of each frame, often 0, 6 or 12.
 
 Playback (`play_demo`, `demomode = 2`) sets `sync*[0]` and `synctics` from each sample and calls `domovethings`, so the game runs the same code as in play. The attract loop starts at demo 1 (or `LAMEDUKE_DEMO`), goes through the eight demos in order and wraps. Each one starts a new game from its 3-byte header. A missing demo ends the game with "Demo not found."

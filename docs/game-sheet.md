@@ -80,7 +80,7 @@ From the exe's help (0x154F0) and `check_args` in `source/premap.c`. Flags start
 | `/s#` | Skill. The help says "0-3", but the code subtracts 1, so `/s1`–`/s4` give the four skills. |
 | `/q` | Help quotes on. |
 | `/d` | Debug mode. Starts with all ammo raised, unlocks every weapon key and inventory item, and gives the U door cheat. |
-| `/r` | Record a demo. On exit it writes `mydemo_0.dmo` for volume 1 level 1, otherwise `mydemo_1.dmo`. These overwrite the shipped demos. |
+| `/r` | Record a demo. On exit it writes `mydemo_0.dmo` for volume 1 level 1, otherwise `mydemo_1.dmo`. These are shipped demos, so the first recording copies the original to `mydemo_N.dmo.bak`. An empty recording is not written. |
 | `/oDIR` | Prints "I/O path rerouted to DIR." Nothing reads the path. |
 | `/e` | Prints "Encoding L1.MAP" through "Encoding N9.MAP". It writes nothing. |
 | `/p#` | Not in the exe. Renderer for this run: 0 Classic, 1 solid colour, 2 Polymost, 3 OpenGL. |

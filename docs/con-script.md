@@ -79,7 +79,7 @@ The messages keep the exe's spelling ("Paramater", "Dupiclate"). They are:
 - errors: an undefined symbol or parameter, `actor` inside a `state` or `actor`, `enda` without `actor` (printed as 'aend'), too many `{` or `}` before `enda`, an unknown sound, an unknown state, `ends` without `state`, `/*` without `*/`;
 - warnings: a duplicate `action`, `move` or `define`, an `else` with no `if`.
 
-Any error exits the game. With warnings only, it prints "Press any key to ignore, or ESC to exit." and reads one character with `getchar()`; anything below 32 exits. In the port that reads stdin, so Enter alone, Esc or a closed stdin exits; a letter and Enter goes on. On success it prints "Total Lines" and "Code Size", which is (script ints − 1) × 4 bytes.
+Any error exits the game. With warnings only, it prints "Press any key to ignore, or ESC to exit." and reads one character with `getchar()`. The exe exits on anything below 32. The port reads stdin a line at a time, so it exits only on Esc (27); Enter, any other key or no input goes on. On success it prints "Total Lines" and "Code Size", which is (script ints − 1) × 4 bytes.
 
 Compiling also stops at `end`, at a `}` outside any block, or at the end of the text.
 

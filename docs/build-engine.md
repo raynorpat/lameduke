@@ -45,7 +45,7 @@ The extra records are word_23DE7A (count) and unk_1BCF10 (data) in the exe. Noth
 
 Several shipped maps end right after the sprites (L7, M1, M4, N2–N5, O1, per [map-editor.md](map-editor.md)). The exe's `read()` returns 0 and the count stays as it was, so the board still loads. The port does the same and sets `boardhadextra` to 0. Anything after the extras is ignored, as in the exe.
 
-After the read, `loadboard` calls `initspritelists`, then `insertsprite(sectnum, statnum)` for each sprite in order. The free lists start in index order, so sprite `i` gets slot `i`. It returns 0 on success, -1 otherwise.
+After the read, `loadboard` rejects the board if any sprite's `sectnum` is outside the loaded sectors or its `statnum` is `MAXSTATUS` or more; one such sprite would pair the two free lists off by one for every later sprite. Then `loadboard` calls `initspritelists`, then `insertsprite(sectnum, statnum)` for each sprite in order. The free lists start in index order, so sprite `i` gets slot `i`. It returns 0 on success, -1 otherwise.
 
 There are two writers:
 
