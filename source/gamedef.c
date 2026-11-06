@@ -589,8 +589,15 @@ int compilecon(void)
     scriptsize = scriptptr;
     printf("  * Found %ld warning(s) and %ld error(s).\n", (long)warning, (long)error);
     free(text);
-    if (error || (warning && (puts("  * Press any key to ignore, or ESC to exit."), getchar() < 32)))
+    if (error)
         exit(0);
+    /* The exe exits on any key below 32. Console input here comes a line at a
+       time and may be absent, so only an explicit Esc exits. */
+    if (warning) {
+        puts("  * Press any key to ignore, or ESC to exit.");
+        if (getchar() == 27)
+            exit(0);
+    }
     total_lines = (short)(total_lines + line_number);
     printf("    Total Lines:%ld.\n", (long)total_lines);
     printf("    Code Size:%ld bytes.\n", (long)(scriptptr - 1) * 4);
