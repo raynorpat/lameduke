@@ -149,9 +149,9 @@ The editor uses the same keys in its own `build.cfg`.
 | `tools/` | `mapcheck`, `cfgcheck` and `convmap4`. |
 | `docs/` | The docs above; `docs/superpowers/` holds the rebuild designs and plans. |
 
-## Build engine license
+## License
 
-Ken Silverman's released Build source has its own terms, reproduced in
-[BUILDLIC.TXT](source/build/BUILDLIC.TXT). The engine provenance and local
-changes are described in [VENDORED.md](source/build/VENDORED.md). Those terms
-are distinct from the rights in the original game and its data files.
+The source code is under the GNU GPL v2 and Ken Silverman's Build Engine
+license; see [LICENSE.md](LICENSE.md). The engine provenance and local
+changes are described in [VENDORED.md](source/build/VENDORED.md). Neither
+license covers the original game and its data files.
