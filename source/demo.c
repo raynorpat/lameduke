@@ -129,6 +129,35 @@ void demo_record(void)
     rec.count = n + 1 > 0x3FFF ? 0x3FFF : n + 1;
 }
 
+/* Both slots a recording takes are shipped attract demos. Before the first
+   overwrite, copy the demo there to mydemo_N.dmo.bak; a .bak already there
+   is the original and stays. */
+static void keeporiginal(int slot)
+{
+    char name[32], bak[40];
+    FILE *in, *out;
+    int c;
+
+    demo_name(slot, name, (int)sizeof name);
+    snprintf(bak, sizeof bak, "%s.bak", name);
+    if ((out = plat_fopen(bak, "rb")) != NULL) {
+        fclose(out);
+        return;
+    }
+    if ((in = plat_fopen(name, "rb")) == NULL)
+        return;
+    if ((out = plat_fopen(bak, "wb")) != NULL) {
+        while ((c = getc(in)) != EOF)
+            putc(c, out);
+        /* a partial copy must not pass for the original next time */
+        if (fclose(out) == 0 && !ferror(in))
+            printf("Kept the original as %s\n", bak);
+        else
+            remove(bak);
+    }
+    fclose(in);
+}
+
 /* 0x1B920: on the way out a recording drops its last sample and goes to
    mydemo_0.dmo for /v1 /l1, otherwise mydemo_1.dmo. */
 void demo_write(void)
@@ -138,6 +167,11 @@ void demo_write(void)
     if (demomode != 1)
         return;
     rec.count--;
+    if (rec.count <= 0) {
+        puts("Demo has no samples; not written.");
+        return;
+    }
+    keeporiginal(slot);
     rec.volume = ps[0].volume;
     rec.level = ps[0].level;
     rec.skill = ps[0].skill;
