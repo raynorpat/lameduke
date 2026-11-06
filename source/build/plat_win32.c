@@ -12,6 +12,11 @@ FILE *plat_fopen(const char *name, const char *mode)
     return fopen(name, mode);
 }
 
+int plat_rename(const char *from, const char *to)
+{
+    return MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) ? 0 : -1;
+}
+
 int plat_listdir(void (*fn)(const char *name, int isdir, void *ctx), void *ctx)
 {
     WIN32_FIND_DATAA fd;

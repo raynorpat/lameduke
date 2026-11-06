@@ -253,13 +253,18 @@ int saveboard(const char *filename, int px, int py, int pz, short startang, shor
 
 /* The editor's save: as saveboard, but sprites go out in index order, so
    a load and save renumbers nothing, and the closing count only when the
-   loaded board had one. */
+   loaded board had one. It writes filename.tmp and then replaces filename,
+   so a failed save leaves the old map whole. */
 int writeboard(const char *filename, int px, int py, int pz, short startang, short startsect)
 {
-    FILE *fp = plat_fopen(filename, "wb");
+    char tmp[1024];
+    FILE *fp;
     int version = 5, i;
     short n = 0, nsec = (short)numsectors, nwal = (short)numwalls;
 
+    if (snprintf(tmp, sizeof tmp, "%s.tmp", filename) >= (int)sizeof tmp)
+        return -1;
+    fp = fopen(tmp, "wb");
     if (!fp)
         return -1;
     fwrite(&version, 4, 1, fp);
@@ -284,7 +289,11 @@ int writeboard(const char *filename, int px, int py, int pz, short startang, sho
         fwrite(boardextra, 10, (size_t)numboardextra, fp);
     }
     i = ferror(fp);
-    return fclose(fp) == 0 && !i ? 0 : -1;
+    if (fclose(fp) != 0 || i || plat_rename(tmp, filename) != 0) {
+        remove(tmp);
+        return -1;
+    }
+    return 0;
 }
 
 static int sectorofwallnum(int w)
