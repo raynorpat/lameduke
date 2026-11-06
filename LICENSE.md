@@ -27,6 +27,24 @@ Neither license covers the game data in this repository (maps, art, sounds,
 music, scripts, demos and the original executables), the Duke Nukem name, or
 other trademarks. Those remain the property of their respective holders.
 
+## LameDuke game data
+
+The LameDuke files were released by 3D Realms' Duke Nukem team on
+January 29, 1997, the first anniversary of Duke Nukem 3D's shareware release,
+as `LAMEDUKE.ZIP`. Their release notes, [LAMEDUKE.TXT](LAMEDUKE.TXT), dated
+that day, say the release is provided "as is" for entertainment purposes
+only, with no support:
+
+> NOTE: This might not even work on all systems, so don't even bother leaving
+> us Email about this. This is provided "as is" for entertainment
+> purposes only.
+
+> P.S. Just in case you missed it, don't send us any E-Mail on Lameduke.
+> This is released "as is". We don't even know if it will work.
+
+The data is included here as it was released and is not relicensed by this
+project.
+
 SDL2, which CMake may download, has its own zlib license.
 
 ## Build Engine license
