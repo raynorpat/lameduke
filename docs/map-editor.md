@@ -50,7 +50,7 @@ F5 and F6 show what the cursor is on. `source/editor/lstub.c` cites the source o
 ./build/bin/convmap4 L9.MAP L9V5.MAP
 ```
 
-`convmap4` never writes over its input, and it reports any v4 field that version 5 can't hold. The layout and how it was recovered are in [map-format-v4.md](map-format-v4.md). A converted map can be edited, and it plays under a map name the game loads. M8's start lies outside its sector, as in the shipped N8, which uses the same start.
+`convmap4` never writes over its input, and it reports any v4 field that version 5 can't hold. The layout and how it was recovered are in [map-format.md](map-format.md#version-4). A converted map can be edited, and it plays under a map name the game loads. M8's start lies outside its sector, as in the shipped N8, which uses the same start.
 
 ## Testing aids
 

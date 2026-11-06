@@ -1,5 +1,5 @@
 /* convmap4 IN OUT: a version-4 board (L9.MAP, M8.MAP) to version 5, through
-   the editor's writeboard. The v4 layout is in docs/map-format-v4.md. The
+   the editor's writeboard. The v4 layout is in docs/map-format.md. The
    tags split into lotag (low half) and hitag (high half); the fields v5
    added take the shipped maps' commonest values (pal and visibility 0,
    extra -1). A v4 field v5 cannot hold is reported, not dropped silently. */
