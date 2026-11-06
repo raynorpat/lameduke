@@ -483,9 +483,9 @@ static int parsecommand(void)
         return 0;
     case K_COMMENT:
         scriptptr--;
+        /* stop on the newline; skiptotoken counts it */
         while (*textptr != '\n' && *textptr)
             textptr++;
-        line_number++;
         return 0;
     case K_BLOCKCOMMENT:
         scriptptr--;
@@ -507,6 +507,12 @@ static int parsecommand(void)
             ;
         return 0;
     case K_RBRACE:
+        /* with no '{' open, returning 1 would end the whole compile */
+        if (num_braces <= 0) {
+            printf("  * ERROR!(L%ld) Found '}' with no '{'.\n", (long)line_number);
+            error++;
+            return 0;
+        }
         num_braces--;
         return 1;
     case K_MUSIC:

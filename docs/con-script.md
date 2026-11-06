@@ -76,12 +76,12 @@ Loading script...
 
 The messages keep the exe's spelling ("Paramater", "Dupiclate"). They are:
 
-- errors: an undefined symbol or parameter, `actor` inside a `state` or `actor`, `enda` without `actor` (printed as 'aend'), too many `{` or `}` before `enda`, an unknown sound, an unknown state, `ends` without `state`, `/*` without `*/`;
+- errors: an undefined symbol or parameter, `actor` inside a `state` or `actor`, `enda` without `actor` (printed as 'aend'), too many `{` before `enda`, a `}` with no `{` open, an unknown sound, an unknown state, `ends` without `state`, `/*` without `*/`;
 - warnings: a duplicate `action`, `move` or `define`, an `else` with no `if`.
 
 Any error exits the game. With warnings only, it prints "Press any key to ignore, or ESC to exit." and reads one character with `getchar()`. The exe exits on anything below 32. The port reads stdin a line at a time, so it exits only on Esc (27); Enter, any other key or no input goes on. On success it prints "Total Lines" and "Code Size", which is (script ints − 1) × 4 bytes.
 
-Compiling also stops at `end`, at a `}` outside any block, or at the end of the text.
+Compiling also stops at `end` or at the end of the text. A `}` outside any block is an error; the exe stopped compiling there without a message.
 
 ## The interpreter
 
@@ -250,6 +250,6 @@ How the compiler handles its limits:
 
 - A script that reaches `MAXSCRIPTSIZE` − 8 ints stops compiling with "Script is larger than 16384 words." Each command checks this before it runs, because the `actor` header, `end` and a `state` call write a few words past `scriptptr` without `emit`'s bound. The exe had no such check and wrote past the array.
 - A 513th label is an error ("More than 512 labels."). `labels[]` has one spare row, so the name being read always has somewhere to go; the exe read one past the end here.
-- Line numbers in messages can run ahead. A `//` comment counts its newline once itself and once more when the next token is found. An include's lines are added to the total.
+- Line numbers in messages match the file. The exe counted the newline after a `//` comment twice; the port counts it once. The "Total Lines" figure adds each include's lines to the total.
 
-The shipped scripts stay well inside these limits: the port reports 1868 lines and 13336 bytes (3334 of 16384 ints) with no warnings.
+The shipped scripts stay well inside these limits: the port reports 1843 lines (the exe's count, with doubled comment lines, is 1868) and 13336 bytes (3334 of 16384 ints) with no warnings.
