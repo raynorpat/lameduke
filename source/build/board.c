@@ -200,6 +200,15 @@ int loadboard(const char *filename)
     /* the exe stops reading here, so anything after the tail is ignored */
     fclose(fp);
 
+    /* one sprite outside the lists would pair the sector and status free
+       lists off by one for every sprite after it */
+    for (i = 0; i < nspr; i++)
+        if (sprite[i].sectnum < 0 || sprite[i].sectnum >= nsec
+            || sprite[i].statnum < 0 || sprite[i].statnum >= MAXSTATUS) {
+            free_board();
+            initspritelists();
+            return -1;
+        }
     for (i = 0; i < nspr; i++)
         insertsprite(sprite[i].sectnum, sprite[i].statnum);
     numsectors = nsec;
@@ -1006,7 +1015,7 @@ void deletesprite(short s)
 /* 0x50E57. Reuses the slot just freed, as the exe does. */
 int changespritesect(short s, short sectnum)
 {
-    if ((unsigned short)sectnum > MAXSECTORS || sprite[s].sectnum == sectnum || sprite[s].sectnum == MAXSECTORS)
+    if ((unsigned short)sectnum >= MAXSECTORS || sprite[s].sectnum == sectnum || sprite[s].sectnum == MAXSECTORS)
         return -1;
     deletespritesect(s);
     insertspritesect(sectnum);
@@ -1016,7 +1025,7 @@ int changespritesect(short s, short sectnum)
 /* 0x50EA0 */
 int changespritestat(short s, short statnum)
 {
-    if ((unsigned short)statnum > MAXSTATUS || sprite[s].statnum == statnum || sprite[s].statnum == MAXSTATUS)
+    if ((unsigned short)statnum >= MAXSTATUS || sprite[s].statnum == statnum || sprite[s].statnum == MAXSTATUS)
         return -1;
     deletespritestat(s);
     insertspritestat(statnum);
