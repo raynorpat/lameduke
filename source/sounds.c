@@ -232,8 +232,9 @@ void playmusic(const char *fn)
         return;
     }
     fclose(fp);
-    MUSIC_PlaySong(next, 1);
-    taskman = 1;
+    /* TaskMan takes the timer only when a song is scheduled */
+    if (MUSIC_PlaySong(next, 1) == MUSIC_Ok)
+        taskman = 1;
     free(song);
     song = next;
 }
