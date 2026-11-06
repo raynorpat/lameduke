@@ -432,9 +432,11 @@ int platform_video(int width, int height)
     /* 320x200 was stretched to 4:3 on a VGA monitor. */
     if (getrendermode() < 2 && width == 320 && height == 200)
         window_h = 720;
-    if (window)
-        SDL_SetWindowSize(window, window_w, window_h);
-    else {
+    if (window) {
+        /* the in-game 2D map keeps the game's window; its frame is stretched in */
+        if (!ydim16 || editstatus)
+            SDL_SetWindowSize(window, window_w, window_h);
+    } else {
         window = SDL_CreateWindow(title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             window_w, window_h, SDL_WINDOW_SHOWN | display_flags());
